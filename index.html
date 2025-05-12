@@ -98,20 +98,23 @@
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">AR 體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" class="ar-scene" touch-action="none">
+            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" class="ar-scene" touch-action="none" gesture-detector>
                 <a-marker preset="hiro">
                     <a-entity
                         position="0 0 0"
                         scale="0.15 0.15 0.15"
                         rotation="90 0 0"
                         gltf-model="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"
-                        gesture-handler="minScale: 0.05; maxScale: 0.5;"
+                        gesture-handler="minScale: 0.05; maxScale: 0.5; rotationFactor: 1;"
                     ></a-entity>
                 </a-marker>
                 <a-entity camera></a-entity>
             </a-scene>
             <div class="controls">
                 <button id="start-ar">啟動 AR</button>
+            </div>
+            <div style="position: absolute; bottom: 60px; left: 10px; background-color: rgba(0, 0, 0, 0.5); color: white; padding: 5px 10px; border-radius: 4px; z-index: 10;">
+                提示：<br>• 掃描 Hiro 標記<br>• 單指拖動可旋轉模型<br>• 雙指縮放可調整大小
             </div>
         </div>
     </div>
@@ -135,7 +138,103 @@
             renderer.setSize(container.clientWidth, container.clientHeight);
             container.appendChild(renderer.domElement);
             
-            // 添加軌道控制
+            // 滑鼠和觸控追蹤變數
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            // 直接操作模型的事件處理
+            container.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                previousMousePosition = {
+                    x: e.clientX,
+                    y: e.clientY
+                };
+            });
+            
+            container.addEventListener('mousemove', function(e) {
+                if (!isDragging || !model) return;
+                
+                const deltaMove = {
+                    x: e.clientX - previousMousePosition.x,
+                    y: e.clientY - previousMousePosition.y
+                };
+                
+                // 直接旋轉模型，而不是相機
+                model.rotation.y += deltaMove.x * 0.01;
+                model.rotation.x += deltaMove.y * 0.01;
+                
+                previousMousePosition = {
+                    x: e.clientX,
+                    y: e.clientY
+                };
+            });
+            
+            window.addEventListener('mouseup', function() {
+                isDragging = false;
+            });
+            
+            // 觸控事件
+            container.addEventListener('touchstart', function(e) {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    previousMousePosition = {
+                        x: e.touches[0].clientX,
+                        y: e.touches[0].clientY
+                    };
+                }
+                e.preventDefault();
+            }, { passive: false });
+            
+            container.addEventListener('touchmove', function(e) {
+                if (!isDragging || !model) return;
+                
+                if (e.touches.length === 1) {
+                    const deltaMove = {
+                        x: e.touches[0].clientX - previousMousePosition.x,
+                        y: e.touches[0].clientY - previousMousePosition.y
+                    };
+                    
+                    // 直接旋轉模型，而不是相機
+                    model.rotation.y += deltaMove.x * 0.01;
+                    model.rotation.x += deltaMove.y * 0.01;
+                    
+                    previousMousePosition = {
+                        x: e.touches[0].clientX,
+                        y: e.touches[0].clientY
+                    };
+                }
+                
+                // 處理二指縮放
+                if (e.touches.length === 2) {
+                    const dist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    
+                    if (previousDist === null) {
+                        previousDist = dist;
+                    }
+                    
+                    const scale = dist / previousDist;
+                    
+                    if (model && scale !== 1) {
+                        model.scale.multiplyScalar(scale);
+                        previousDist = dist;
+                    }
+                }
+                
+                e.preventDefault();
+            }, { passive: false });
+            
+            container.addEventListener('touchend', function(e) {
+                isDragging = false;
+                previousDist = null;
+                e.preventDefault();
+            }, { passive: false });
+            
+            let previousDist = null;
+            
+            // 添加軌道控制 - 但不直接使用
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.25;
@@ -152,6 +251,9 @@
                 ONE: THREE.TOUCH.ROTATE,
                 TWO: THREE.TOUCH.DOLLY_PAN
             };
+            
+            // 禁用OrbitControls，使用我們自己的控制
+            controls.enabled = false;
             
             // 添加拖動提示
             const infoText = document.createElement('div');
@@ -223,14 +325,14 @@
         
         // 按鈕控制
         document.getElementById('reset-view').addEventListener('click', function() {
-            controls.reset();
             if (model) {
                 // 重置模型旋轉
                 model.rotation.set(Math.PI / 2, 0, 0);
+                // 重置模型大小
+                model.scale.set(1.5, 1.5, 1.5);
             }
             // 重置相機位置
             camera.position.set(0, 0, 8);
-            controls.update();
         });
         
         document.getElementById('start-ar').addEventListener('click', function() {
@@ -241,6 +343,180 @@
         window.onload = function() {
             initViewer();
         };
+
+        // 註冊手勢處理組件
+        AFRAME.registerComponent('gesture-detector', {
+            schema: {
+                element: { default: '' }
+            },
+            init: function() {
+                this.targetElement = this.data.element && document.querySelector(this.data.element);
+                if (!this.targetElement) {
+                    this.targetElement = this.el;
+                }
+                
+                this.internalState = {
+                    previousState: null
+                };
+                
+                this.emitGestureEvent = this.emitGestureEvent.bind(this);
+                
+                this.targetElement.addEventListener('touchstart', this.emitGestureEvent);
+                this.targetElement.addEventListener('touchend', this.emitGestureEvent);
+                this.targetElement.addEventListener('touchmove', this.emitGestureEvent);
+            },
+            
+            emitGestureEvent: function(event) {
+                const currentState = this.getTouchState(event);
+                const previousState = this.internalState.previousState;
+                
+                const gestureContinues = previousState && currentState && 
+                    currentState.touchCount == previousState.touchCount;
+                
+                const gestureEnded = previousState && !gestureContinues;
+                const gestureStarted = currentState && !gestureContinues;
+                
+                if (gestureEnded) {
+                    const eventName = this.getEventPrefix(previousState.touchCount) + 'fingerend';
+                    this.el.emit(eventName, previousState);
+                    this.internalState.previousState = null;
+                }
+                
+                if (gestureStarted) {
+                    currentState.startTime = performance.now();
+                    currentState.startPosition = currentState.position;
+                    currentState.startSpread = currentState.spread;
+                    
+                    const eventName = this.getEventPrefix(currentState.touchCount) + 'fingerstart';
+                    this.el.emit(eventName, currentState);
+                    this.internalState.previousState = currentState;
+                }
+                
+                if (gestureContinues) {
+                    const eventDetail = {
+                        positionChange: {
+                            x: currentState.position.x - previousState.position.x,
+                            y: currentState.position.y - previousState.position.y
+                        }
+                    };
+                    
+                    if (currentState.spread) {
+                        eventDetail.spreadChange = currentState.spread - previousState.spread;
+                    }
+                    
+                    // 更新狀態
+                    Object.assign(previousState, currentState);
+                    
+                    // 觸發移動事件
+                    const eventName = this.getEventPrefix(currentState.touchCount) + 'fingermove';
+                    this.el.emit(eventName, eventDetail);
+                }
+            },
+            
+            getTouchState: function(event) {
+                if (event.touches.length === 0) {
+                    return null;
+                }
+                
+                // 計算中心點
+                const touchList = [];
+                for (let i = 0; i < event.touches.length; i++) {
+                    touchList.push(event.touches[i]);
+                }
+                
+                const touchState = {
+                    touchCount: touchList.length
+                };
+                
+                // 計算中心點
+                const centerPointX = touchList.reduce((sum, touch) => sum + touch.clientX, 0) / touchList.length;
+                const centerPointY = touchList.reduce((sum, touch) => sum + touch.clientY, 0) / touchList.length;
+                
+                touchState.position = { x: centerPointX, y: centerPointY };
+                
+                // 計算兩指間距離
+                if (touchList.length >= 2) {
+                    const spread = Math.sqrt(
+                        Math.pow(touchList[0].clientX - touchList[1].clientX, 2) +
+                        Math.pow(touchList[0].clientY - touchList[1].clientY, 2)
+                    );
+                    touchState.spread = spread;
+                }
+                
+                return touchState;
+            },
+            
+            getEventPrefix: function(touchCount) {
+                const numberNames = ['one', 'two', 'three', 'many'];
+                return numberNames[Math.min(touchCount, 4) - 1];
+            }
+        });
+        
+        // 註冊手勢處理器
+        AFRAME.registerComponent('gesture-handler', {
+            schema: {
+                enabled: { default: true },
+                rotationFactor: { default: 5 },
+                minScale: { default: 0.3 },
+                maxScale: { default: 8 },
+            },
+            
+            init: function() {
+                this.handleScale = this.handleScale.bind(this);
+                this.handleRotation = this.handleRotation.bind(this);
+                
+                this.isVisible = false;
+                this.initialScale = this.el.object3D.scale.clone();
+                this.scaleFactor = 1;
+                
+                this.el.sceneEl.addEventListener('markerFound', () => {
+                    this.isVisible = true;
+                });
+                
+                this.el.sceneEl.addEventListener('markerLost', () => {
+                    this.isVisible = false;
+                });
+            },
+            
+            update: function() {
+                if (this.data.enabled) {
+                    this.el.sceneEl.addEventListener('twofingermove', this.handleScale);
+                    this.el.sceneEl.addEventListener('onefingermove', this.handleRotation);
+                } else {
+                    this.el.sceneEl.removeEventListener('twofingermove', this.handleScale);
+                    this.el.sceneEl.removeEventListener('onefingermove', this.handleRotation);
+                }
+            },
+            
+            remove: function() {
+                this.el.sceneEl.removeEventListener('twofingermove', this.handleScale);
+                this.el.sceneEl.removeEventListener('onefingermove', this.handleRotation);
+            },
+            
+            handleRotation: function(event) {
+                if (!this.isVisible) {
+                    return;
+                }
+                
+                this.el.object3D.rotation.y += event.detail.positionChange.x * this.data.rotationFactor;
+                this.el.object3D.rotation.x += event.detail.positionChange.y * this.data.rotationFactor;
+            },
+            
+            handleScale: function(event) {
+                if (!this.isVisible) {
+                    return;
+                }
+                
+                this.scaleFactor *= 1 + event.detail.spreadChange / event.detail.startSpread;
+                
+                // 限制縮放範圍
+                this.scaleFactor = Math.min(Math.max(this.scaleFactor, this.data.minScale), this.data.maxScale);
+                
+                this.el.object3D.scale.x = this.scaleFactor * this.initialScale.x;
+                this.el.object3D.scale.y = this.scaleFactor * this.initialScale.y;
+                this.el.object3D.scale.z = this.scaleFactor * this.initialScale.z;
+            }
+        });
     </script>
 </body>
 </html> 
