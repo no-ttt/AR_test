@@ -98,16 +98,23 @@
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">AR 體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" class="ar-scene" touch-action="none" gesture-detector>
-                <a-marker preset="hiro">
+            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
+                <a-assets>
+                    <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"></a-asset-item>
+                </a-assets>
+                
+                <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true">
                     <a-entity
-                        position="0 1 0"
+                        id="duck"
+                        position="0 0 0"
                         scale="0.15 0.15 0.15"
                         rotation="90 0 0"
-                        gltf-model="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"
-                        gesture-handler="minScale: 0.05; maxScale: 0.5; rotationFactor: 1;"
+                        gltf-model="#duck-model"
+                        class="clickable"
+                        gesture-handler="minScale: 0.05; maxScale: 0.8;"
                     ></a-entity>
                 </a-marker>
+                
                 <a-entity camera></a-entity>
             </a-scene>
             <div class="controls">
@@ -370,7 +377,24 @@
         });
         
         document.getElementById('start-ar').addEventListener('click', function() {
-            alert('請將相機對準 Hiro 標記來查看 AR 模型！\n您可以在網上搜尋並列印 Hiro 標記。');
+            alert('請將相機對準 Hiro 標記來查看 AR 模型！\n\n您可以使用單指拖動來旋轉模型，雙指縮放來調整大小。\n\n如果您需要 Hiro 標記，可以在網上搜尋"Hiro marker AR.js"並打印。');
+            
+            // 向下滾動到AR部分
+            document.querySelector('.ar-section').scrollIntoView({ behavior: 'smooth' });
+            
+            // 請求相機權限
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function(stream) {
+                        console.log('相機權限已授予');
+                        // 釋放相機
+                        stream.getTracks().forEach(track => track.stop());
+                    })
+                    .catch(function(error) {
+                        console.error('相機權限被拒絕:', error);
+                        alert('請允許相機權限以使用AR功能');
+                    });
+            }
         });
         
         // 初始化
@@ -378,7 +402,7 @@
             initViewer();
         };
 
-        // 註冊手勢處理組件
+        // 註冊手勢檢測組件
         AFRAME.registerComponent('gesture-detector', {
             schema: {
                 element: { default: '' }
@@ -395,12 +419,14 @@
                 
                 this.emitGestureEvent = this.emitGestureEvent.bind(this);
                 
-                this.targetElement.addEventListener('touchstart', this.emitGestureEvent);
-                this.targetElement.addEventListener('touchend', this.emitGestureEvent);
-                this.targetElement.addEventListener('touchmove', this.emitGestureEvent);
+                this.targetElement.addEventListener('touchstart', this.emitGestureEvent, { passive: false });
+                this.targetElement.addEventListener('touchend', this.emitGestureEvent, { passive: false });
+                this.targetElement.addEventListener('touchmove', this.emitGestureEvent, { passive: false });
             },
             
             emitGestureEvent: function(event) {
+                event.preventDefault();
+                
                 const currentState = this.getTouchState(event);
                 const previousState = this.internalState.previousState;
                 
@@ -436,6 +462,7 @@
                     
                     if (currentState.spread) {
                         eventDetail.spreadChange = currentState.spread - previousState.spread;
+                        console.log("Spread change:", eventDetail.spreadChange);
                     }
                     
                     // 更新狀態
@@ -470,11 +497,9 @@
                 
                 // 計算兩指間距離
                 if (touchList.length >= 2) {
-                    const spread = Math.sqrt(
-                        Math.pow(touchList[0].clientX - touchList[1].clientX, 2) +
-                        Math.pow(touchList[0].clientY - touchList[1].clientY, 2)
-                    );
-                    touchState.spread = spread;
+                    const dx = touchList[1].clientX - touchList[0].clientX;
+                    const dy = touchList[1].clientY - touchList[0].clientY;
+                    touchState.spread = Math.sqrt(dx * dx + dy * dy);
                 }
                 
                 return touchState;
@@ -490,67 +515,58 @@
         AFRAME.registerComponent('gesture-handler', {
             schema: {
                 enabled: { default: true },
-                rotationFactor: { default: 5 },
-                minScale: { default: 0.3 },
-                maxScale: { default: 8 },
+                rotationFactor: { default: 1 },
+                minScale: { default: 0.05 },
+                maxScale: { default: 3 }
             },
             
             init: function() {
-                this.handleScale = this.handleScale.bind(this);
-                this.handleRotation = this.handleRotation.bind(this);
-                
-                this.isVisible = false;
                 this.initialScale = this.el.object3D.scale.clone();
                 this.scaleFactor = 1;
                 
                 this.el.sceneEl.addEventListener('markerFound', () => {
-                    this.isVisible = true;
+                    console.log("Marker found!");
+                    this.isMarkerVisible = true;
                 });
                 
                 this.el.sceneEl.addEventListener('markerLost', () => {
-                    this.isVisible = false;
+                    console.log("Marker lost!");
+                    this.isMarkerVisible = false;
                 });
+                
+                this.el.addEventListener('click', this.onClick.bind(this));
+                
+                // 用於縮放和旋轉的事件監聽器
+                this.el.sceneEl.addEventListener('onefingermove', this.handleRotation.bind(this));
+                this.el.sceneEl.addEventListener('twofingermove', this.handleScale.bind(this));
             },
             
-            update: function() {
-                if (this.data.enabled) {
-                    this.el.sceneEl.addEventListener('twofingermove', this.handleScale);
-                    this.el.sceneEl.addEventListener('onefingermove', this.handleRotation);
+            onClick: function(evt) {
+                console.log("Duck clicked!");
+            },
+            
+            handleRotation: function(evt) {
+                if (!this.isMarkerVisible) return;
+                
+                // 計算旋轉量
+                const rotationSpeed = 4;
+                this.el.object3D.rotation.y += evt.detail.positionChange.x * this.data.rotationFactor * rotationSpeed;
+                this.el.object3D.rotation.x += evt.detail.positionChange.y * this.data.rotationFactor * rotationSpeed;
+            },
+            
+            handleScale: function(evt) {
+                if (!this.isMarkerVisible) return;
+                
+                console.log("Scale event:", evt.detail.spreadChange);
+                
+                // 根據手指距離變化計算縮放係數
+                if (evt.detail.spreadChange > 0) {
+                    // 放大
+                    this.scaleFactor = this.scaleFactor * (1 + evt.detail.spreadChange / 50);
                 } else {
-                    this.el.sceneEl.removeEventListener('twofingermove', this.handleScale);
-                    this.el.sceneEl.removeEventListener('onefingermove', this.handleRotation);
+                    // 縮小
+                    this.scaleFactor = this.scaleFactor * (1 + evt.detail.spreadChange / 50);
                 }
-            },
-            
-            remove: function() {
-                this.el.sceneEl.removeEventListener('twofingermove', this.handleScale);
-                this.el.sceneEl.removeEventListener('onefingermove', this.handleRotation);
-            },
-            
-            handleRotation: function(event) {
-                if (!this.isVisible) {
-                    return;
-                }
-                
-                this.el.object3D.rotation.y += event.detail.positionChange.x * this.data.rotationFactor;
-                this.el.object3D.rotation.x += event.detail.positionChange.y * this.data.rotationFactor;
-            },
-            
-            handleScale: function(event) {
-                if (!this.isVisible) {
-                    return;
-                }
-                
-                // 如果沒有 spreadChange 或值太小則忽略
-                if (!event.detail.spreadChange || Math.abs(event.detail.spreadChange) < 2) {
-                    return;
-                }
-                
-                // 計算縮放倍率
-                const scaleDelta = event.detail.spreadChange > 0 ? 1.05 : 0.95;
-                
-                // 放大或縮小模型
-                this.scaleFactor *= scaleDelta;
                 
                 // 限制縮放範圍
                 this.scaleFactor = Math.min(Math.max(this.scaleFactor, this.data.minScale), this.data.maxScale);
@@ -559,6 +575,8 @@
                 this.el.object3D.scale.x = this.scaleFactor * this.initialScale.x;
                 this.el.object3D.scale.y = this.scaleFactor * this.initialScale.y;
                 this.el.object3D.scale.z = this.scaleFactor * this.initialScale.z;
+                
+                console.log("Current scale:", this.scaleFactor);
             }
         });
     </script>
