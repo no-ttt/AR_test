@@ -99,6 +99,7 @@
                     <a-entity
                         position="0 0 0"
                         scale="0.15 0.15 0.15"
+                        rotation="90 0 0"
                         gltf-model="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"
                     ></a-entity>
                 </a-marker>
@@ -152,6 +153,9 @@
                     
                     // 調整模型位置和大小 - 增加了模型大小
                     model.scale.set(1.5, 1.5, 1.5);
+                    
+                    // 調整模型旋轉角度，讓小鴨站立
+                    model.rotation.x = Math.PI / 2;
                     
                     // 自動居中模型
                     const box = new THREE.Box3().setFromObject(model);
