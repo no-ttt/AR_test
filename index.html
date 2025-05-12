@@ -86,8 +86,14 @@
             <div class="controls">
                 <button id="rotate-left">向左旋轉</button>
                 <button id="rotate-right">向右旋轉</button>
+                <button id="rotate-up">向上旋轉</button>
+                <button id="rotate-down">向下旋轉</button>
+                <button id="rotate-clockwise">順時針旋轉</button>
+                <button id="rotate-counterclockwise">逆時針旋轉</button>
                 <button id="zoom-in">放大</button>
                 <button id="zoom-out">縮小</button>
+                <button id="auto-rotate">自動旋轉</button>
+                <button id="reset-view">重置視角</button>
             </div>
         </div>
         
@@ -134,6 +140,24 @@
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.25;
+            controls.enableZoom = true;
+            controls.enablePan = true;
+            controls.enableRotate = true;
+            controls.autoRotate = false;
+            controls.minDistance = 2;
+            controls.maxDistance = 15;
+            
+            // 添加拖動提示
+            const infoText = document.createElement('div');
+            infoText.style.position = 'absolute';
+            infoText.style.top = '50px';
+            infoText.style.left = '10px';
+            infoText.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            infoText.style.color = 'white';
+            infoText.style.padding = '5px 10px';
+            infoText.style.borderRadius = '4px';
+            infoText.innerHTML = '提示：使用滑鼠拖動可360°旋轉模型<br>滾輪可縮放';
+            document.getElementById('model-viewer').appendChild(infoText);
             
             // 添加光源
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -200,12 +224,45 @@
             if (model) model.rotation.y += Math.PI / 8;
         });
         
+        document.getElementById('rotate-up').addEventListener('click', function() {
+            if (model) model.rotation.x += Math.PI / 8;
+        });
+        
+        document.getElementById('rotate-down').addEventListener('click', function() {
+            if (model) model.rotation.x -= Math.PI / 8;
+        });
+        
+        document.getElementById('rotate-clockwise').addEventListener('click', function() {
+            if (model) model.rotation.z += Math.PI / 8;
+        });
+        
+        document.getElementById('rotate-counterclockwise').addEventListener('click', function() {
+            if (model) model.rotation.z -= Math.PI / 8;
+        });
+        
         document.getElementById('zoom-in').addEventListener('click', function() {
             camera.position.z -= 0.5;
         });
         
         document.getElementById('zoom-out').addEventListener('click', function() {
             camera.position.z += 0.5;
+        });
+        
+        document.getElementById('auto-rotate').addEventListener('click', function() {
+            controls.autoRotate = !controls.autoRotate;
+            this.textContent = controls.autoRotate ? '停止旋轉' : '自動旋轉';
+            this.style.backgroundColor = controls.autoRotate ? '#e74c3c' : '#4CAF50';
+        });
+        
+        document.getElementById('reset-view').addEventListener('click', function() {
+            controls.reset();
+            if (model) {
+                // 重置模型旋轉
+                model.rotation.set(Math.PI / 2, 0, 0);
+            }
+            // 重置相機位置
+            camera.position.set(0, 0, 8);
+            controls.update();
         });
         
         document.getElementById('start-ar').addEventListener('click', function() {
