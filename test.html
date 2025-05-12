@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>簡易 AR 小遊戲</title>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ar.js@3.3.2/aframe/build/aframe-ar.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #score {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 24px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    #timer {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      color: white;
+      font-size: 24px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    #gameOver {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 36px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 999;
+    }
+    #instructions {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 18px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      text-align: center;
+      background-color: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 999;
+    }
+    #error-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: red;
+      font-size: 24px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      background-color: rgba(255,255,255,0.8);
+      padding: 20px;
+      border-radius: 10px;
+      display: none;
+      z-index: 9999;
+    }
+    #camera-status {
+      position: fixed;
+      top: 60px;
+      left: 20px;
+      color: white;
+      font-size: 18px;
+      font-family: Arial, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    #debug-info {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      color: white;
+      font-size: 14px;
+      font-family: monospace;
+      background-color: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 999;
+    }
+    #camera-select {
+      position: fixed;
+      top: 100px;
+      left: 20px;
+      z-index: 999;
+    }
+    #camera-preview {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+    }
+    .a-canvas {
+      width: 100% !important;
+      height: 100% !important;
+      z-index: 0;
+    }
+    #marker-image {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 100px;
+      height: 100px;
+      border: 2px solid white;
+      border-radius: 5px;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <video id="camera-preview" autoplay playsinline></video>
+  <div id="score">分數: 0</div>
+  <div id="timer">時間: 30</div>
+  <div id="gameOver">遊戲結束！</div>
+  <div id="instructions">
+    請將 Hiro 標記對準相機<br>
+    確保光線充足，標記清晰可見
+  </div>
+  <div id="error-message"></div>
+  <div id="camera-status">相機狀態：檢查中...</div>
+  <div id="debug-info"></div>
+  <select id="camera-select" style="display: none;"></select>
+  <img id="marker-image" src="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/HIRO.jpg" alt="Hiro Marker">
+
+  <a-scene 
+    embedded 
+    arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth:640; sourceHeight:480; displayWidth: 640; displayHeight: 480;"
+    renderer="logarithmicDepthBuffer: true;"
+    vr-mode-ui="enabled: false"
+  >
+    <!-- Marker-based AR -->
+    <a-marker preset="hiro" emitevents="true" id="marker">
+      <a-box position="0 0.5 0" rotation="0 45 0" color="red" id="target" animation="property: rotation; to: 0 360 0; loop: true; dur: 2000"></a-box>
+    </a-marker>
+
+    <!-- AR Camera -->
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    let score = 0;
+    let timeLeft = 30;
+    let gameActive = true;
+    let markerFound = false;
+    let currentStream = null;
+
+    // 更新除錯資訊
+    function updateDebugInfo(info) {
+      document.getElementById('debug-info').textContent = info;
+    }
+
+    // 更新相機狀態顯示
+    function updateCameraStatus(status) {
+      document.getElementById('camera-status').textContent = `相機狀態：${status}`;
+    }
+
+    // 設定相機選擇器
+    async function setupCameraSelector() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      updateDebugInfo(`找到 ${videoDevices.length} 個相機設備`);
+      
+      if (videoDevices.length > 1) {
+        const select = document.getElementById('camera-select');
+        select.style.display = 'block';
+        
+        videoDevices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `相機 ${videoDevices.indexOf(device) + 1}`;
+          select.appendChild(option);
+        });
+
+        select.addEventListener('change', async () => {
+          if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+          }
+          await initCamera(select.value);
+        });
+      }
+    }
+
+    // 初始化相機
+    async function initCamera(deviceId = null) {
+      try {
+        const constraints = {
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "environment",
+            ...(deviceId && { deviceId: { exact: deviceId } })
+          }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentStream = stream;
+        
+        // 設定預覽
+        const videoElement = document.getElementById('camera-preview');
+        videoElement.srcObject = stream;
+        
+        const videoTrack = stream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
+        
+        updateDebugInfo(`相機解析度: ${capabilities.width?.max || '未知'}x${capabilities.height?.max || '未知'}`);
+        updateCameraStatus('相機正常運作');
+        
+        return true;
+      } catch (err) {
+        console.error('相機錯誤:', err);
+        showError(`相機錯誤: ${err.message}`);
+        updateCameraStatus('相機錯誤');
+        return false;
+      }
+    }
+
+    // 顯示錯誤訊息
+    function showError(message) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    // 更新分數顯示
+    function updateScore() {
+      document.getElementById('score').textContent = `分數: ${score}`;
+    }
+
+    // 更新時間顯示
+    function updateTimer() {
+      document.getElementById('timer').textContent = `時間: ${timeLeft}`;
+    }
+
+    // 遊戲結束
+    function endGame() {
+      gameActive = false;
+      document.getElementById('gameOver').style.display = 'block';
+      document.getElementById('gameOver').textContent = `遊戲結束！最終分數: ${score}`;
+    }
+
+    // 初始化遊戲
+    async function initGame() {
+      await setupCameraSelector();
+      const hasCamera = await initCamera();
+      if (!hasCamera) return;
+
+      // 監聽標記是否被偵測到
+      const marker = document.querySelector('#marker');
+      marker.addEventListener('markerFound', () => {
+        markerFound = true;
+        document.getElementById('error-message').style.display = 'none';
+        updateDebugInfo('標記已找到');
+      });
+      
+      marker.addEventListener('markerLost', () => {
+        markerFound = false;
+        showError('找不到標記，請將 Hiro 標記對準相機');
+        updateDebugInfo('標記已遺失');
+      });
+
+      // 計時器
+      const timer = setInterval(() => {
+        if (timeLeft > 0 && gameActive) {
+          timeLeft--;
+          updateTimer();
+        } else {
+          clearInterval(timer);
+          endGame();
+        }
+      }, 1000);
+    }
+
+    // 目標物互動
+    const target = document.querySelector('#target');
+    target.addEventListener('click', () => {
+      if (!gameActive || !markerFound) return;
+      
+      score += 10;
+      updateScore();
+      
+      // 改變目標位置
+      const randomX = Math.random() * 2 - 1;
+      const randomY = Math.random() * 2;
+      const randomZ = Math.random() * 2 - 1;
+      target.setAttribute('position', `${randomX} ${randomY} ${randomZ}`);
+      
+      // 改變顏色
+      const colors = ['red', 'blue', 'green', 'yellow', 'purple'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      target.setAttribute('color', randomColor);
+    });
+
+    // 等待 A-Frame 載入完成
+    document.addEventListener('DOMContentLoaded', () => {
+      // 啟動遊戲
+      initGame();
+    });
+  </script>
+</body>
+</html>
