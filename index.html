@@ -6,6 +6,7 @@
     <title>3D 模型檢視器與 AR 體驗</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/controls/OrbitControls.js"></script>
@@ -24,12 +25,18 @@
         .viewer-section {
             height: 50vh;
             position: relative;
+            touch-action: none; /* 啟用觸控事件 */
         }
         
         #model-viewer {
             width: 100%;
             height: 100%;
             background-color: #f0f0f0;
+            cursor: grab; /* 顯示可拖動的游標 */
+        }
+        
+        #model-viewer:active {
+            cursor: grabbing; /* 拖動時的游標 */
         }
         
         .ar-section {
@@ -84,15 +91,6 @@
             <div class="section-title">3D 模型檢視器</div>
             <div id="model-viewer"></div>
             <div class="controls">
-                <button id="rotate-left">向左旋轉</button>
-                <button id="rotate-right">向右旋轉</button>
-                <button id="rotate-up">向上旋轉</button>
-                <button id="rotate-down">向下旋轉</button>
-                <button id="rotate-clockwise">順時針旋轉</button>
-                <button id="rotate-counterclockwise">逆時針旋轉</button>
-                <button id="zoom-in">放大</button>
-                <button id="zoom-out">縮小</button>
-                <button id="auto-rotate">自動旋轉</button>
                 <button id="reset-view">重置視角</button>
             </div>
         </div>
@@ -100,13 +98,14 @@
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">AR 體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" class="ar-scene">
+            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" class="ar-scene" touch-action="none">
                 <a-marker preset="hiro">
                     <a-entity
                         position="0 0 0"
                         scale="0.15 0.15 0.15"
                         rotation="90 0 0"
                         gltf-model="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"
+                        gesture-handler="minScale: 0.05; maxScale: 0.5;"
                     ></a-entity>
                 </a-marker>
                 <a-entity camera></a-entity>
@@ -146,6 +145,13 @@
             controls.autoRotate = false;
             controls.minDistance = 2;
             controls.maxDistance = 15;
+            controls.rotateSpeed = 1.0;
+            controls.zoomSpeed = 1.2;
+            controls.panSpeed = 0.8;
+            controls.touches = {
+                ONE: THREE.TOUCH.ROTATE,
+                TWO: THREE.TOUCH.DOLLY_PAN
+            };
             
             // 添加拖動提示
             const infoText = document.createElement('div');
@@ -156,7 +162,7 @@
             infoText.style.color = 'white';
             infoText.style.padding = '5px 10px';
             infoText.style.borderRadius = '4px';
-            infoText.innerHTML = '提示：使用滑鼠拖動可360°旋轉模型<br>滾輪可縮放';
+            infoText.innerHTML = '提示：<br>• 用手指拖動可360°旋轉模型<br>• 雙指縮放可調整大小<br>• 雙指滑動可平移視角';
             document.getElementById('model-viewer').appendChild(infoText);
             
             // 添加光源
@@ -216,44 +222,6 @@
         }
         
         // 按鈕控制
-        document.getElementById('rotate-left').addEventListener('click', function() {
-            if (model) model.rotation.y -= Math.PI / 8;
-        });
-        
-        document.getElementById('rotate-right').addEventListener('click', function() {
-            if (model) model.rotation.y += Math.PI / 8;
-        });
-        
-        document.getElementById('rotate-up').addEventListener('click', function() {
-            if (model) model.rotation.x += Math.PI / 8;
-        });
-        
-        document.getElementById('rotate-down').addEventListener('click', function() {
-            if (model) model.rotation.x -= Math.PI / 8;
-        });
-        
-        document.getElementById('rotate-clockwise').addEventListener('click', function() {
-            if (model) model.rotation.z += Math.PI / 8;
-        });
-        
-        document.getElementById('rotate-counterclockwise').addEventListener('click', function() {
-            if (model) model.rotation.z -= Math.PI / 8;
-        });
-        
-        document.getElementById('zoom-in').addEventListener('click', function() {
-            camera.position.z -= 0.5;
-        });
-        
-        document.getElementById('zoom-out').addEventListener('click', function() {
-            camera.position.z += 0.5;
-        });
-        
-        document.getElementById('auto-rotate').addEventListener('click', function() {
-            controls.autoRotate = !controls.autoRotate;
-            this.textContent = controls.autoRotate ? '停止旋轉' : '自動旋轉';
-            this.style.backgroundColor = controls.autoRotate ? '#e74c3c' : '#4CAF50';
-        });
-        
         document.getElementById('reset-view').addEventListener('click', function() {
             controls.reset();
             if (model) {
