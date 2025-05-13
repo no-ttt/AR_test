@@ -150,31 +150,32 @@
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">AR 小鴨體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
+            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
                 <a-assets>
                     <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"></a-asset-item>
                 </a-assets>
                 
-                <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true">
-                    <a-entity
-                        id="duck"
-                        position="0 0 0"
-                        scale="0.15 0.15 0.15"
-                        rotation="90 0 0"
-                        gltf-model="#duck-model"
-                        class="clickable"
-                        gesture-handler="minScale: 0.05; maxScale: 0.8;"
-                    ></a-entity>
-                </a-marker>
+                <!-- 使用a-entity直接在相機前方放置模型，不需要標記 -->
+                <a-entity
+                    id="duck"
+                    position="0 -0.5 -2"
+                    scale="0.3 0.3 0.3"
+                    rotation="90 0 0"
+                    gltf-model="#duck-model"
+                    class="clickable"
+                    gesture-handler="minScale: 0.1; maxScale: 1.0;"
+                ></a-entity>
                 
-                <a-entity camera></a-entity>
+                <a-entity camera look-controls></a-entity>
             </a-scene>
             <div class="controls">
                 <button id="reset-view">重置視角</button>
                 <button id="auto-rotate">自動旋轉</button>
+                <button id="move-closer">向前</button>
+                <button id="move-away">向後</button>
             </div>
             <div class="info-text">
-                提示：<br>• 掃描 Hiro 標記<br>• 單指拖動可旋轉模型<br>• 雙指縮放可調整大小
+                提示：<br>• 單指拖動可旋轉模型<br>• 雙指縮放可調整大小
             </div>
         </div>
     </div>
@@ -203,11 +204,11 @@
                 const duckEntity = document.getElementById('duck');
                 if (duckEntity) {
                     // 重置位置
-                    duckEntity.setAttribute('position', '0 0 0');
+                    duckEntity.setAttribute('position', '0 -0.5 -2');
                     // 重置旋轉，保持90度X軸旋轉讓鴨子站立
                     duckEntity.setAttribute('rotation', '90 0 0');
                     // 重置縮放
-                    duckEntity.setAttribute('scale', '0.15 0.15 0.15');
+                    duckEntity.setAttribute('scale', '0.3 0.3 0.3');
                 }
             });
             
@@ -242,6 +243,36 @@
                     // 停止自動旋轉
                     clearInterval(rotationInterval);
                 }
+            });
+
+            // 設置向前按鈕功能
+            document.getElementById('move-closer').addEventListener('click', function() {
+                const duckEntity = document.getElementById('duck');
+                if (!duckEntity) return;
+                
+                const currentPosition = duckEntity.getAttribute('position');
+                // z值減小，模型向前移動（接近相機）
+                const newZ = Math.max(currentPosition.z - 0.5, -5);
+                duckEntity.setAttribute('position', {
+                    x: currentPosition.x,
+                    y: currentPosition.y,
+                    z: newZ
+                });
+            });
+            
+            // 設置向後按鈕功能
+            document.getElementById('move-away').addEventListener('click', function() {
+                const duckEntity = document.getElementById('duck');
+                if (!duckEntity) return;
+                
+                const currentPosition = duckEntity.getAttribute('position');
+                // z值增大，模型向後移動（遠離相機）
+                const newZ = Math.min(currentPosition.z + 0.5, -1);
+                duckEntity.setAttribute('position', {
+                    x: currentPosition.x,
+                    y: currentPosition.y,
+                    z: newZ
+                });
             });
         };
 
@@ -372,15 +403,8 @@
                     this.initialScale = this.el.object3D.scale.clone();
                     this.scaleFactor = 1;
                     
-                    this.el.sceneEl.addEventListener('markerFound', () => {
-                        console.log("Marker found!");
-                        this.isMarkerVisible = true;
-                    });
-                    
-                    this.el.sceneEl.addEventListener('markerLost', () => {
-                        console.log("Marker lost!");
-                        this.isMarkerVisible = false;
-                    });
+                    // 不再需要檢查標記可見性
+                    this.isMarkerVisible = true;
                     
                     this.el.addEventListener('click', this.onClick.bind(this));
                     
@@ -394,7 +418,7 @@
                 },
                 
                 handleRotation: function(evt) {
-                    if (!this.isMarkerVisible) return;
+                    // 移除標記可見性檢查
                     
                     // 計算旋轉量
                     const rotationSpeed = 4;
@@ -403,7 +427,7 @@
                 },
                 
                 handleScale: function(evt) {
-                    if (!this.isMarkerVisible) return;
+                    // 移除標記可見性檢查
                     
                     console.log("Scale event:", evt.detail.spreadChange);
                     
