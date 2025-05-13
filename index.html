@@ -22,6 +22,8 @@
         // 在相機流開始時確保背景透明
         window.addEventListener('camera-started', function() {
             console.log('相機流已開始');
+            // 確保鴨子模型顯示
+            setTimeout(ensureDuckVisible, 500);
         });
         
         // 處理資源載入錯誤
@@ -152,6 +154,23 @@
             const overlay = document.getElementById('permission-overlay');
             const arScene = document.querySelector('a-scene');
             
+            // 添加模型加載事件監聽器
+            document.addEventListener('model-loaded', function(event) {
+                console.log('模型已加載:', event);
+                // 確保鴨子模型顯示
+                setTimeout(ensureDuckVisible, 100);
+            });
+            
+            // 監聽duck模型的加載事件
+            const duckModel = document.querySelector('#duck');
+            if (duckModel) {
+                duckModel.addEventListener('model-loaded', function() {
+                    console.log('鴨子模型已加載');
+                    // 確保鴨子模型顯示
+                    ensureDuckVisible();
+                });
+            }
+            
             // 初始隱藏AR場景，直到權限授予
             if (arScene) {
                 arScene.style.visibility = 'hidden';
@@ -195,6 +214,9 @@
                             duckEntity.object3D.visible = true;
                             console.log('確保鴨子模型可見');
                         }
+                        
+                        // 調用統一的鴨子顯示函數
+                        ensureDuckVisible();
                     }, 1000);
                 }
                 return;
@@ -247,6 +269,9 @@
                                     duckEntity.object3D.visible = true;
                                     console.log('確保鴨子模型可見');
                                 }
+                                
+                                // 調用統一的鴨子顯示函數
+                                ensureDuckVisible();
                             }, 1000);
                         }
                     } else {
@@ -506,7 +531,7 @@
                 device-orientation-permission-ui="enabled: false"
             >
                 <a-assets>
-                    <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"></a-asset-item>
+                    <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf" response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
                 </a-assets>
                 
                 <!-- 使用a-entity直接在相機前方放置模型，不需要標記 -->
@@ -518,7 +543,11 @@
                     gltf-model="#duck-model"
                     class="clickable"
                     gesture-handler="minScale: 0.1; maxScale: 1.0;"
+                    visible="true"
                     ></a-entity>
+                
+                <!-- 備用：使用盒子模型，如果鴨子模型加載失敗可以顯示 -->
+                <a-box id="backup-model" position="0 0 -2" scale="0.2 0.2 0.2" color="yellow" visible="false"></a-box>
                 
                 <a-entity camera look-controls></a-entity>
             </a-scene>
@@ -608,6 +637,9 @@
                                             duckEntity.object3D.visible = true;
                                             console.log('確保鴨子模型可見');
                                         }
+                                        
+                                        // 調用統一的鴨子顯示函數
+                                        ensureDuckVisible();
                                     }, 1000);
                                 }
                             } else {
@@ -940,6 +972,77 @@
                 arScene.style.opacity = '1';
             }
         });
+
+        // 確保鴨子模型顯示
+        function ensureDuckVisible() {
+            console.log('確保鴨子模型顯示');
+            const duckEntity = document.getElementById('duck');
+            
+            // 檢查主模型是否存在
+            if (duckEntity) {
+                console.log('找到鴨子模型，嘗試設置可見性');
+                // 強制設置可見性
+                duckEntity.setAttribute('visible', 'true');
+                
+                // 如果有object3D，直接設置其可見性
+                if (duckEntity.object3D) {
+                    duckEntity.object3D.visible = true;
+                    console.log('鴨子模型 object3D 設置為可見');
+                } else {
+                    console.warn('鴨子模型沒有 object3D');
+                }
+                
+                // 確保位置正確
+                duckEntity.setAttribute('position', '0 0 -2');
+                duckEntity.setAttribute('rotation', '90 0 0');
+                duckEntity.setAttribute('scale', '0.3 0.3 0.3');
+                
+                console.log('鴨子模型設置完成');
+                
+                // 監聽模型加載錯誤事件
+                duckEntity.addEventListener('model-error', function(event) {
+                    console.error('鴨子模型加載失敗:', event);
+                    showBackupModel();
+                });
+                
+                // 檢查模型是否正確加載
+                setTimeout(function() {
+                    if (!duckEntity.object3D || !duckEntity.object3D.children || duckEntity.object3D.children.length === 0) {
+                        console.warn('鴨子模型似乎未正確加載，顯示備用模型');
+                        showBackupModel();
+                    }
+                }, 3000);
+            } else {
+                console.error('找不到鴨子模型，顯示備用模型');
+                showBackupModel();
+            }
+        }
+        
+        // 顯示備用模型
+        function showBackupModel() {
+            console.log('顯示備用模型');
+            const backupModel = document.getElementById('backup-model');
+            if (backupModel) {
+                backupModel.setAttribute('visible', 'true');
+                console.log('備用模型設置為可見');
+            } else {
+                console.error('找不到備用模型');
+                
+                // 嘗試手動創建備用模型
+                const scene = document.querySelector('a-scene');
+                if (scene) {
+                    console.log('嘗試手動創建備用模型');
+                    const newBox = document.createElement('a-box');
+                    newBox.id = 'backup-model';
+                    newBox.setAttribute('position', '0 0 -2');
+                    newBox.setAttribute('scale', '0.2 0.2 0.2');
+                    newBox.setAttribute('color', 'yellow');
+                    newBox.setAttribute('visible', 'true');
+                    scene.appendChild(newBox);
+                    console.log('手動創建備用模型完成');
+                }
+            }
+        }
     </script>
 </body>
 </html> 
