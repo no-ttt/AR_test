@@ -9,12 +9,6 @@
     
     <!-- 添加相機權限處理腳本 -->
     <script>
-        // 檢查是否是AR模式
-        function isARMode() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.has('ar');
-        }
-        
         // 在AR.js初始化前處理相機權限
         window.addEventListener('camera-init', function(event) {
             console.log('相機初始化中...');
@@ -148,11 +142,11 @@
         
         // 在頁面加載完成後，初始化AR.js
         document.addEventListener('DOMContentLoaded', function() {
-            // 檢查是否是AR模式
-            if (isARMode()) {
-                console.log('AR模式：跳過權限檢查');
-                return;
-            }
+            console.log('頁面加載完成');
+            
+            // 檢測是否為移動設備
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            console.log('是否為移動設備:', isMobile);
             
             // 獲取覆蓋層元素
             const overlay = document.getElementById('permission-overlay');
@@ -164,37 +158,130 @@
                 arScene.style.opacity = '0';
             }
             
-            // 檢查相機權限狀態
-            navigator.permissions.query({name: 'camera'}).then(function(result) {
-                console.log('相機權限狀態:', result.state);
+            // 檢查本地存儲中是否已授予權限
+            const permissionGranted = localStorage.getItem('cameraPermissionGranted') === 'true';
+            
+            // 如果本地存儲中已授予權限，直接顯示AR場景
+            if (permissionGranted) {
+                console.log('本地存儲中已授予相機權限');
+                // 隱藏覆蓋層
+                overlay.style.display = 'none';
+                // 顯示AR場景
+                if (arScene) {
+                    arScene.style.visibility = 'visible';
+                    arScene.style.opacity = '1';
+                    
+                    // 確保AR場景正確初始化
+                    setTimeout(function() {
+                        // 觸發場景初始化
+                        if (typeof arScene.emit === 'function') {
+                            arScene.emit('loaded');
+                            console.log('手動觸發場景loaded事件');
+                            
+                            // 確保AR.js系統初始化
+                            if (arScene.systems && arScene.systems.arjs) {
+                                const arSystem = arScene.systems.arjs;
+                                if (typeof arSystem.restart === 'function') {
+                                    arSystem.restart();
+                                    console.log('重新啟動AR.js系統');
+                                }
+                            }
+                        }
+                        
+                        // 確保鴨子模型可見
+                        const duckEntity = document.getElementById('duck');
+                        if (duckEntity) {
+                            duckEntity.setAttribute('visible', 'true');
+                            duckEntity.object3D.visible = true;
+                            console.log('確保鴨子模型可見');
+                        }
+                    }, 1000);
+                }
+                return;
+            }
+            
+            // 如果是移動設備，嘗試使用更簡單的權限檢查方法
+            if (isMobile) {
+                console.log('移動設備：使用簡化的權限檢查');
+                // 顯示覆蓋層
+                overlay.style.display = 'flex';
                 
-                if (result.state === 'granted') {
-                    // 已經有權限，隱藏覆蓋層
-                    overlay.style.display = 'none';
-                    // 顯示AR場景
-                    if (arScene) {
-                        arScene.style.visibility = 'visible';
-                        arScene.style.opacity = '1';
-                    }
-                } else {
-                    // 顯示覆蓋層
-                    overlay.style.display = 'flex';
+                // 修改授予權限按鈕文字，使其更清晰
+                const grantButton = document.getElementById('grant-permission');
+                if (grantButton) {
+                    grantButton.textContent = '點擊這裡開始AR體驗';
+                    grantButton.style.fontSize = '20px';
+                    grantButton.style.padding = '15px 30px';
                 }
                 
-                // 監聽權限狀態變化
-                result.onchange = function() {
-                    console.log('相機權限狀態變更為:', this.state);
-                    if (this.state === 'granted') {
-                        // 權限已授予，隱藏覆蓋層
+                return;
+            }
+            
+            // 如果本地存儲中沒有授予權限，檢查瀏覽器權限狀態
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({name: 'camera'}).then(function(result) {
+                    console.log('相機權限狀態:', result.state);
+                    
+                    if (result.state === 'granted') {
+                        // 已經有權限，設置本地存儲標記
+                        localStorage.setItem('cameraPermissionGranted', 'true');
+                        // 隱藏覆蓋層
                         overlay.style.display = 'none';
                         // 顯示AR場景
                         if (arScene) {
                             arScene.style.visibility = 'visible';
                             arScene.style.opacity = '1';
+                            
+                            // 確保AR場景正確初始化
+                            setTimeout(function() {
+                                // 觸發場景初始化
+                                if (typeof arScene.emit === 'function') {
+                                    arScene.emit('loaded');
+                                    console.log('手動觸發場景loaded事件');
+                                }
+                                
+                                // 確保鴨子模型可見
+                                const duckEntity = document.getElementById('duck');
+                                if (duckEntity) {
+                                    duckEntity.setAttribute('visible', 'true');
+                                    duckEntity.object3D.visible = true;
+                                    console.log('確保鴨子模型可見');
+                                }
+                            }, 1000);
                         }
+                    } else {
+                        // 顯示覆蓋層
+                        overlay.style.display = 'flex';
                     }
-                };
-            });
+                    
+                    // 監聽權限狀態變化
+                    result.onchange = function() {
+                        console.log('相機權限狀態變更為:', this.state);
+                        if (this.state === 'granted') {
+                            // 權限已授予，設置本地存儲標記
+                            localStorage.setItem('cameraPermissionGranted', 'true');
+                            // 隱藏覆蓋層
+                            overlay.style.display = 'none';
+                            // 顯示AR場景
+                            if (arScene) {
+                                arScene.style.visibility = 'visible';
+                                arScene.style.opacity = '1';
+                                
+                                // 重新載入頁面以確保AR場景正確初始化
+                                window.location.reload();
+                            }
+                        }
+                    };
+                }).catch(function(error) {
+                    console.error('無法查詢權限狀態:', error);
+                    // 顯示覆蓋層
+                    overlay.style.display = 'flex';
+                });
+            } else {
+                console.warn('瀏覽器不支持權限查詢API');
+                // 顯示覆蓋層
+                overlay.style.display = 'flex';
+            }
         });
     </script>
     
@@ -402,6 +489,7 @@
         <h2>AR 小鴨體驗</h2>
         <p>此體驗需要使用您的相機。請點擊下方按鈕授予相機權限。</p>
         <button id="grant-permission">授予相機權限</button>
+        <p style="margin-top: 20px; font-size: 12px;">如果遇到問題，請嘗試 <a href="#" id="reset-permission" style="color: white; text-decoration: underline;">重置權限</a></p>
     </div>
     
     <div class="container">
@@ -411,7 +499,7 @@
             <a-scene 
                 class="ar-scene"
                 embedded
-                arjs="sourceType: webcam; debugUIEnabled: false;"
+                arjs="sourceType: webcam; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960; canvasWidth: window.innerWidth; canvasHeight: window.innerHeight;"
                 renderer="antialias: true; alpha: true;"
                 vr-mode-ui="enabled: false"
                 gesture-detector
@@ -468,6 +556,12 @@
             const grantButton = document.getElementById('grant-permission');
             
             grantButton.addEventListener('click', function() {
+                console.log('授予權限按鈕被點擊');
+                
+                // 檢測是否為移動設備
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                console.log('是否為移動設備:', isMobile);
+                
                 // 請求相機權限
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     navigator.mediaDevices.getUserMedia({ video: true })
@@ -478,15 +572,63 @@
                             // 隱藏覆蓋層
                             const overlay = document.getElementById('permission-overlay');
                             overlay.style.display = 'none';
-                            // 顯示AR場景
-                            const arScene = document.querySelector('a-scene');
-                            if (arScene) {
-                                arScene.style.visibility = 'visible';
-                                arScene.style.opacity = '1';
-                                
-                                // 使用新頁面方式載入AR場景
-                                const arUrl = window.location.href.split('?')[0] + '?ar=true';
-                                window.location.href = arUrl;
+                            
+                            // 對於移動設備，直接顯示AR場景，不重新載入頁面
+                            if (isMobile) {
+                                console.log('移動設備：直接顯示AR場景');
+                                const arScene = document.querySelector('a-scene');
+                                if (arScene) {
+                                    // 顯示AR場景
+                                    arScene.style.visibility = 'visible';
+                                    arScene.style.opacity = '1';
+                                    
+                                    // 設置本地存儲標記，表示已授予權限
+                                    localStorage.setItem('cameraPermissionGranted', 'true');
+                                    
+                                    // 手動觸發AR場景初始化
+                                    setTimeout(function() {
+                                        if (typeof arScene.emit === 'function') {
+                                            arScene.emit('loaded');
+                                            console.log('手動觸發場景loaded事件');
+                                            
+                                            // 確保AR.js系統初始化
+                                            if (arScene.systems && arScene.systems.arjs) {
+                                                const arSystem = arScene.systems.arjs;
+                                                if (typeof arSystem.restart === 'function') {
+                                                    arSystem.restart();
+                                                    console.log('重新啟動AR.js系統');
+                                                }
+                                            }
+                                        }
+                                        
+                                        // 確保鴨子模型可見
+                                        const duckEntity = document.getElementById('duck');
+                                        if (duckEntity) {
+                                            duckEntity.setAttribute('visible', 'true');
+                                            duckEntity.object3D.visible = true;
+                                            console.log('確保鴨子模型可見');
+                                        }
+                                    }, 1000);
+                                }
+                            } else {
+                                // 對於桌面設備，重新載入頁面
+                                console.log('桌面設備：重新載入頁面');
+                                // 顯示AR場景
+                                const arScene = document.querySelector('a-scene');
+                                if (arScene) {
+                                    // 顯示AR場景
+                                    arScene.style.visibility = 'visible';
+                                    arScene.style.opacity = '1';
+                                    
+                                    // 設置本地存儲標記，表示已授予權限
+                                    localStorage.setItem('cameraPermissionGranted', 'true');
+                                    
+                                    // 重新載入頁面以啟動AR場景
+                                    console.log('重新載入頁面以啟動AR場景');
+                                    setTimeout(() => {
+                                        window.location.reload();
+                                    }, 500);
+                                }
                             }
                         })
                         .catch(function(error) {
@@ -498,6 +640,39 @@
                     alert('您的瀏覽器不支持訪問相機。請嘗試使用更現代的瀏覽器。');
                 }
             });
+            
+            // 重置權限按鈕點擊處理
+            const resetButton = document.getElementById('reset-permission');
+            if (resetButton) {
+                resetButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('重置權限按鈕被點擊');
+                    
+                    // 清除本地存儲中的權限標記
+                    localStorage.removeItem('cameraPermissionGranted');
+                    
+                    // 如果瀏覽器支持，嘗試重置相機權限
+                    if (navigator.mediaDevices && navigator.permissions) {
+                        navigator.permissions.query({name: 'camera'})
+                            .then(function(permissionStatus) {
+                                console.log('嘗試重置相機權限');
+                                alert('權限已重置，請重新載入頁面。');
+                                // 重新載入頁面
+                                window.location.reload();
+                            })
+                            .catch(function(error) {
+                                console.error('無法查詢權限狀態:', error);
+                                alert('權限已重置，請重新載入頁面。');
+                                // 重新載入頁面
+                                window.location.reload();
+                            });
+                    } else {
+                        alert('權限已重置，請重新載入頁面。');
+                        // 重新載入頁面
+                        window.location.reload();
+                    }
+                });
+            }
             
             // 設置重置按鈕功能
             document.getElementById('reset-view').addEventListener('click', function() {
