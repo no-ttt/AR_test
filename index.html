@@ -150,12 +150,14 @@
             margin: 0;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            background-color: transparent !important;
         }
         
         .container {
             display: flex;
             flex-direction: column;
             height: 100vh;
+            background-color: transparent !important;
         }
         
         .ar-section {
@@ -251,6 +253,13 @@
         a-scene {
             background-color: transparent !important;
             background: transparent !important;
+            z-index: 1;
+        }
+        
+        /* 確保相機視圖正確顯示 */
+        .a-canvas {
+            background-color: transparent !important;
+            z-index: 1 !important;
         }
     </style>
 </head>
@@ -270,10 +279,10 @@
                 class="ar-scene"
                 embedded
                 arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; sourceWidth: 1280; sourceHeight: 960;"
-                renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
+                renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true; colorManagement: true; physicallyCorrectLights: true;"
                 vr-mode-ui="enabled: false"
                 gesture-detector
-                loading-screen="dotsColor: white; backgroundColor: black"
+                loading-screen="dotsColor: white; backgroundColor: transparent"
                 device-orientation-permission-ui="enabled: false"
             >
                 <a-assets>
@@ -343,6 +352,15 @@
                                 arScene.style.visibility = 'visible';
                                 arScene.style.opacity = '1';
                                 
+                                // 確保背景透明
+                                document.body.style.backgroundColor = 'transparent';
+                                
+                                // 確保canvas透明
+                                const canvas = document.querySelector('.a-canvas');
+                                if (canvas) {
+                                    canvas.style.backgroundColor = 'transparent';
+                                }
+                                
                                 // 確保AR.js相機初始化
                                 setTimeout(() => {
                                     // 觸發AR.js相機重新初始化
@@ -396,7 +414,7 @@
                         const currentRotation = duckEntity.getAttribute('rotation');
                         duckEntity.setAttribute('rotation', {
                             x: currentRotation.x,
-                            y: (currentRotation.y + 0.5) % 360,
+                            y: (currentRotation.y + 0.2) % 360,
                             z: currentRotation.z
                         });
                     }, 30);
@@ -585,7 +603,7 @@
                     // 移除標記可見性檢查
                     
                     // 計算旋轉量
-                    const rotationSpeed = 2;
+                    const rotationSpeed = 0.8;
                     this.el.object3D.rotation.y += evt.detail.positionChange.x * this.data.rotationFactor * rotationSpeed;
                     this.el.object3D.rotation.x += evt.detail.positionChange.y * this.data.rotationFactor * rotationSpeed;
                 },
@@ -627,6 +645,19 @@
                 arScene.style.visibility = 'visible';
                 arScene.style.opacity = '1';
                 
+                // 確保背景透明
+                document.body.style.backgroundColor = 'transparent';
+                const sceneEl = document.querySelector('a-scene');
+                if (sceneEl.canvas) {
+                    sceneEl.canvas.style.backgroundColor = 'transparent';
+                }
+                
+                // 修改渲染器設置
+                if (sceneEl.renderer) {
+                    sceneEl.renderer.setClearColor(0x000000, 0);
+                    sceneEl.renderer.setClearAlpha(0);
+                }
+                
                 // 重新初始化AR.js相機
                 if (typeof AFRAME !== 'undefined' && AFRAME.scenes[0]) {
                     const arjsSystem = AFRAME.scenes[0].systems['arjs'];
@@ -636,6 +667,33 @@
                     }
                 }
             }
+        });
+
+        // 確保頁面加載時設置透明背景
+        document.addEventListener('DOMContentLoaded', function() {
+            // 設置背景透明
+            document.body.style.backgroundColor = 'transparent';
+            
+            // 監聽A-Frame場景加載完成事件
+            document.querySelector('a-scene').addEventListener('loaded', function() {
+                console.log('A-Frame場景已加載');
+                
+                // 獲取場景和渲染器
+                const sceneEl = this;
+                
+                // 設置渲染器透明
+                if (sceneEl.renderer) {
+                    sceneEl.renderer.setClearColor(0x000000, 0);
+                    sceneEl.renderer.setClearAlpha(0);
+                    console.log('渲染器透明設置完成');
+                }
+                
+                // 設置canvas透明
+                if (sceneEl.canvas) {
+                    sceneEl.canvas.style.backgroundColor = 'transparent';
+                    console.log('Canvas透明設置完成');
+                }
+            });
         });
     </script>
 </body>
