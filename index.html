@@ -225,12 +225,12 @@
                     autoRotateButton.textContent = '停止旋轉';
                     autoRotateButton.style.backgroundColor = '#e74c3c';
                     
-                    // 啟動自動旋轉，降低旋轉速度，從每30毫秒旋轉1度改為每60毫秒旋轉0.5度
+                    // 啟動自動旋轉，降低旋轉速度，從每30毫秒旋轉1度改為每60毫秒旋轉0.2度
                     rotationInterval = setInterval(function() {
                         const currentRotation = duckEntity.getAttribute('rotation');
                         duckEntity.setAttribute('rotation', {
                             x: currentRotation.x,
-                            y: (currentRotation.y + 0.5) % 360,
+                            y: (currentRotation.y + 0.2) % 360,
                             z: currentRotation.z
                         });
                     }, 60);
@@ -388,8 +388,8 @@
                 handleRotation: function(evt) {
                     // 移除marker可見性檢查
                     
-                    // 計算旋轉量，降低旋轉速度從4降為1.5
-                    const rotationSpeed = 1.5;
+                    // 計算旋轉量，降低旋轉速度從4降為0.5
+                    const rotationSpeed = 0.5;
                     this.el.object3D.rotation.y += evt.detail.positionChange.x * this.data.rotationFactor * rotationSpeed;
                     this.el.object3D.rotation.x += evt.detail.positionChange.y * this.data.rotationFactor * rotationSpeed;
                 },
