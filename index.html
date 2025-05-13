@@ -9,273 +9,193 @@
     
     <!-- 添加相機權限處理腳本 -->
     <script>
-        // 定義全局變量
-        let cameraPermissionGranted = false;
+        // 檢查是否是AR模式
+        function isARMode() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.has('ar');
+        }
         
-        // 在頁面加載完成後初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('頁面加載完成，初始化AR應用');
-            
-            // 獲取DOM元素
-            const overlay = document.getElementById('permission-overlay');
-            const grantButton = document.getElementById('grant-permission');
-            const arScene = document.querySelector('a-scene');
-            
-            // 初始隱藏AR場景
-            if (arScene) {
-                arScene.style.display = 'none';
-            }
-            
-            // 檢查相機權限
-            checkCameraPermission();
-            
-            // 授予權限按鈕點擊事件
-            grantButton.addEventListener('click', requestCameraPermission);
+        // 在AR.js初始化前處理相機權限
+        window.addEventListener('camera-init', function(event) {
+            console.log('相機初始化中...');
         });
         
-        // 檢查相機權限狀態
-        function checkCameraPermission() {
-            console.log('檢查相機權限狀態');
+        window.addEventListener('camera-error', function(error) {
+            console.error('相機錯誤:', error);
+            alert('無法訪問相機。請確保已授予相機權限，然後重新加載頁面。');
+        });
+        
+        // 在相機流開始時確保背景透明
+        window.addEventListener('camera-started', function() {
+            console.log('相機流已開始');
+        });
+        
+        // 處理資源載入錯誤
+        window.addEventListener('error', function(event) {
+            console.error('資源載入錯誤:', event);
+            // 檢查是否是AR.js相關錯誤
+            if (event.filename && event.filename.includes('aframe-ar.js')) {
+                console.warn('AR.js資源載入錯誤，嘗試繼續運行');
+            }
+        }, true);
+        
+        // 處理未捕獲的Promise錯誤
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('未處理的Promise錯誤:', event.reason);
             
-            if (navigator.permissions && navigator.permissions.query) {
-                navigator.permissions.query({ name: 'camera' })
-                    .then(function(permissionStatus) {
-                        console.log('相機權限狀態:', permissionStatus.state);
+            // 檢查是否是相機參數404錯誤
+            if (event.reason && event.reason.message && 
+                event.reason.message.includes('404')) {
+                console.warn('忽略AR.js相關的404錯誤，繼續顯示AR場景');
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // 嘗試強制初始化AR場景
+                setTimeout(function() {
+                    const arScene = document.querySelector('a-scene');
+                    if (arScene && typeof arScene.emit === 'function') {
+                        console.log('嘗試手動觸發場景初始化');
+                        arScene.emit('loaded');
                         
-                        if (permissionStatus.state === 'granted') {
-                            cameraPermissionGranted = true;
-                            handlePermissionGranted();
-                        } else {
-                            showPermissionOverlay();
+                        // 確保鴨子模型可見
+                        const duckEntity = document.getElementById('duck');
+                        if (duckEntity) {
+                            duckEntity.setAttribute('visible', 'true');
+                            duckEntity.object3D.visible = true;
+                            console.log('確保鴨子模型可見');
+                        }
+                    }
+                }, 1000);
+                
+                // 如果AR.js初始化失敗，嘗試使用基本的A-Frame場景
+                setTimeout(function() {
+                    const arScene = document.querySelector('a-scene');
+                    if (arScene && (!arScene.systems || !arScene.systems.arjs || !arScene.systems.arjs._arToolkitContext)) {
+                        console.warn('AR.js初始化失敗，使用基本的A-Frame場景');
+                        
+                        // 添加基本相機和光源
+                        if (!document.querySelector('a-entity[camera][look-controls]')) {
+                            const camera = document.createElement('a-entity');
+                            camera.setAttribute('camera', '');
+                            camera.setAttribute('look-controls', '');
+                            camera.setAttribute('position', '0 1.6 0');
+                            arScene.appendChild(camera);
                         }
                         
-                        // 監聽權限變化
-                        permissionStatus.onchange = function() {
-                            console.log('相機權限狀態變更為:', this.state);
-                            if (this.state === 'granted') {
-                                cameraPermissionGranted = true;
-                                handlePermissionGranted();
+                        if (!document.querySelector('a-light')) {
+                            const light = document.createElement('a-light');
+                            light.setAttribute('type', 'ambient');
+                            light.setAttribute('color', '#FFF');
+                            light.setAttribute('intensity', '0.8');
+                            arScene.appendChild(light);
+                            
+                            const dirLight = document.createElement('a-light');
+                            dirLight.setAttribute('type', 'directional');
+                            dirLight.setAttribute('color', '#FFF');
+                            dirLight.setAttribute('intensity', '0.8');
+                            dirLight.setAttribute('position', '1 1 1');
+                            arScene.appendChild(dirLight);
+                        }
+                        
+                        // 確保鴨子模型可見
+                        const duckEntity = document.getElementById('duck');
+                        if (duckEntity) {
+                            duckEntity.setAttribute('position', '0 0 -2');
+                            duckEntity.setAttribute('visible', 'true');
+                            duckEntity.object3D.visible = true;
+                        }
+                        
+                        // 設置背景顏色
+                        arScene.setAttribute('background', 'color: #87CEEB');
+                    }
+                }, 5000);
+            }
+        });
+        
+        // 在頁面加載完成後，確保AR.js正確初始化
+        window.addEventListener('load', function() {
+            if (isARMode()) {
+                console.log('AR模式：確保AR.js正確初始化');
+                
+                // 確保AR場景可見
+                const arScene = document.querySelector('a-scene');
+                if (arScene) {
+                    arScene.style.visibility = 'visible';
+                    arScene.style.opacity = '1';
+                    
+                    // 檢查AR.js是否已經載入
+                    if (typeof AFRAME !== 'undefined' && AFRAME.scenes.length > 0) {
+                        console.log('AFRAME已載入，場景數量:', AFRAME.scenes.length);
+                        
+                        // 嘗試手動初始化AR系統
+                        try {
+                            const scene = AFRAME.scenes[0];
+                            if (scene.hasLoaded) {
+                                console.log('場景已加載');
                             } else {
-                                showPermissionOverlay();
+                                console.log('等待場景加載');
+                                scene.addEventListener('loaded', function() {
+                                    console.log('場景加載完成');
+                                });
                             }
-                        };
-                    })
-                    .catch(function(error) {
-                        console.error('無法查詢權限狀態:', error);
-                        showPermissionOverlay();
-                    });
-            } else {
-                console.log('瀏覽器不支持權限查詢API');
-                showPermissionOverlay();
+                        } catch (e) {
+                            console.error('初始化AR系統時出錯:', e);
+                        }
+                    }
+                }
             }
-        }
+        });
         
-        // 顯示權限請求覆蓋層
-        function showPermissionOverlay() {
+        // 在頁面加載完成後，初始化AR.js
+        document.addEventListener('DOMContentLoaded', function() {
+            // 檢查是否是AR模式
+            if (isARMode()) {
+                console.log('AR模式：跳過權限檢查');
+                return;
+            }
+            
+            // 獲取覆蓋層元素
             const overlay = document.getElementById('permission-overlay');
-            if (overlay) {
-                overlay.style.display = 'flex';
-            }
-        }
-        
-        // 請求相機權限
-        function requestCameraPermission() {
-            console.log('請求相機權限');
+            const arScene = document.querySelector('a-scene');
             
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia({ video: true })
-                    .then(function(stream) {
-                        console.log('相機權限已授予');
-                        
-                        // 釋放相機資源
-                        stream.getTracks().forEach(track => track.stop());
-                        
-                        // 標記權限已授予
-                        cameraPermissionGranted = true;
-                        
-                        // 處理權限授予後的操作
-                        handlePermissionGranted();
-                    })
-                    .catch(function(error) {
-                        console.error('相機權限被拒絕:', error);
-                        alert('無法獲取相機權限。請在瀏覽器設置中允許相機訪問，然後重新載入頁面。');
-                    });
-            } else {
-                console.error('瀏覽器不支持getUserMedia API');
-                alert('您的瀏覽器不支持相機訪問。請使用最新版本的Chrome、Firefox或Safari。');
-            }
-        }
-        
-        // 處理權限授予後的操作
-        function handlePermissionGranted() {
-            console.log('處理權限授予後的操作');
-            
-            // 隱藏覆蓋層
-            const overlay = document.getElementById('permission-overlay');
-            if (overlay) {
-                overlay.style.display = 'none';
+            // 初始隱藏AR場景，直到權限授予
+            if (arScene) {
+                arScene.style.visibility = 'hidden';
+                arScene.style.opacity = '0';
             }
             
-            // 創建一個新的HTML頁面用於AR體驗
-            const arHtml = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>AR 小鴨體驗</title>
-                    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"><\/script>
-                    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"><\/script>
-                    <style>
-                        body {
-                            margin: 0;
-                            overflow: hidden;
+            // 檢查相機權限狀態
+            navigator.permissions.query({name: 'camera'}).then(function(result) {
+                console.log('相機權限狀態:', result.state);
+                
+                if (result.state === 'granted') {
+                    // 已經有權限，隱藏覆蓋層
+                    overlay.style.display = 'none';
+                    // 顯示AR場景
+                    if (arScene) {
+                        arScene.style.visibility = 'visible';
+                        arScene.style.opacity = '1';
+                    }
+                } else {
+                    // 顯示覆蓋層
+                    overlay.style.display = 'flex';
+                }
+                
+                // 監聽權限狀態變化
+                result.onchange = function() {
+                    console.log('相機權限狀態變更為:', this.state);
+                    if (this.state === 'granted') {
+                        // 權限已授予，隱藏覆蓋層
+                        overlay.style.display = 'none';
+                        // 顯示AR場景
+                        if (arScene) {
+                            arScene.style.visibility = 'visible';
+                            arScene.style.opacity = '1';
                         }
-                        .controls {
-                            position: absolute;
-                            bottom: 20px;
-                            left: 50%;
-                            transform: translateX(-50%);
-                            z-index: 10;
-                            display: flex;
-                            gap: 10px;
-                        }
-                        button {
-                            padding: 8px 16px;
-                            background-color: #4CAF50;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                        }
-                        .info-text {
-                            position: absolute;
-                            bottom: 80px;
-                            left: 10px;
-                            background-color: rgba(0, 0, 0, 0.5);
-                            color: white;
-                            padding: 5px 10px;
-                            border-radius: 4px;
-                            z-index: 10;
-                        }
-                    <\/style>
-                <\/head>
-                <body>
-                    <a-scene 
-                        embedded
-                        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best;"
-                        renderer="antialias: true; alpha: true;"
-                        vr-mode-ui="enabled: false"
-                    >
-                        <a-assets>
-                            <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"><\/a-asset-item>
-                        <\/a-assets>
-                        
-                        <a-entity
-                            id="duck"
-                            position="0 0 -2"
-                            scale="0.3 0.3 0.3"
-                            rotation="90 0 0"
-                            gltf-model="#duck-model"
-                        ><\/a-entity>
-                        
-                        <a-entity camera look-controls><\/a-entity>
-                    <\/a-scene>
-                    
-                    <div class="controls">
-                        <button id="reset-view">重置視角<\/button>
-                        <button id="auto-rotate">自動旋轉<\/button>
-                        <button id="move-closer">向前<\/button>
-                        <button id="move-away">向後<\/button>
-                    <\/div>
-                    
-                    <div class="info-text">
-                        提示：<br>• 單指拖動可旋轉模型<br>• 雙指縮放可調整大小
-                    <\/div>
-                    
-                    <script>
-                        // 設置重置按鈕功能
-                        document.getElementById('reset-view').addEventListener('click', function() {
-                            const duckEntity = document.getElementById('duck');
-                            if (duckEntity) {
-                                duckEntity.setAttribute('position', '0 0 -2');
-                                duckEntity.setAttribute('rotation', '90 0 0');
-                                duckEntity.setAttribute('scale', '0.3 0.3 0.3');
-                            }
-                        });
-                        
-                        // 設置自動旋轉按鈕功能
-                        let autoRotating = false;
-                        let rotationInterval;
-                        const autoRotateButton = document.getElementById('auto-rotate');
-                        
-                        autoRotateButton.addEventListener('click', function() {
-                            const duckEntity = document.getElementById('duck');
-                            if (!duckEntity) return;
-                            
-                            autoRotating = !autoRotating;
-                            
-                            if (autoRotating) {
-                                autoRotateButton.textContent = '停止旋轉';
-                                autoRotateButton.style.backgroundColor = '#e74c3c';
-                                
-                                rotationInterval = setInterval(function() {
-                                    const currentRotation = duckEntity.getAttribute('rotation');
-                                    duckEntity.setAttribute('rotation', {
-                                        x: currentRotation.x,
-                                        y: (currentRotation.y + 0.2) % 360,
-                                        z: currentRotation.z
-                                    });
-                                }, 30);
-                            } else {
-                                autoRotateButton.textContent = '自動旋轉';
-                                autoRotateButton.style.backgroundColor = '#4CAF50';
-                                
-                                clearInterval(rotationInterval);
-                            }
-                        });
-                        
-                        // 設置向前按鈕功能
-                        document.getElementById('move-closer').addEventListener('click', function() {
-                            const duckEntity = document.getElementById('duck');
-                            if (!duckEntity) return;
-                            
-                            const currentPosition = duckEntity.getAttribute('position');
-                            const newZ = Math.max(currentPosition.z - 0.5, -5);
-                            duckEntity.setAttribute('position', {
-                                x: currentPosition.x,
-                                y: currentPosition.y,
-                                z: newZ
-                            });
-                        });
-                        
-                        // 設置向後按鈕功能
-                        document.getElementById('move-away').addEventListener('click', function() {
-                            const duckEntity = document.getElementById('duck');
-                            if (!duckEntity) return;
-                            
-                            const currentPosition = duckEntity.getAttribute('position');
-                            const newZ = Math.min(currentPosition.z + 0.5, -1);
-                            duckEntity.setAttribute('position', {
-                                x: currentPosition.x,
-                                y: currentPosition.y,
-                                z: newZ
-                            });
-                        });
-                    <\/script>
-                <\/body>
-                <\/html>
-            `;
-            
-            // 創建一個Blob對象
-            const blob = new Blob([arHtml], { type: 'text/html' });
-            
-            // 創建一個URL
-            const url = URL.createObjectURL(blob);
-            
-            // 在新窗口中打開AR體驗
-            window.location.href = url;
-        }
+                    }
+                };
+            });
+        });
     </script>
     
     <!-- 使用單一的THREE導入方式 -->
@@ -337,6 +257,34 @@
                 };
             };
         }
+        
+        // 修補AR.js的相機參數載入
+        window.addEventListener('load', function() {
+            // 等待一段時間後檢查AR.js是否已載入
+            setTimeout(function() {
+                if (typeof AFRAME !== 'undefined' && AFRAME.scenes.length > 0) {
+                    const scene = AFRAME.scenes[0];
+                    
+                    // 檢查是否有AR系統
+                    if (scene.systems && scene.systems.arjs) {
+                        const arSystem = scene.systems.arjs;
+                        
+                        // 修補相機參數載入方法
+                        if (arSystem._arToolkitContext && arSystem._arToolkitContext.arController) {
+                            console.log('AR.js已初始化，無需修補');
+                        } else {
+                            console.log('嘗試修補AR.js初始化');
+                            
+                            // 手動觸發場景初始化
+                            if (typeof scene.emit === 'function') {
+                                scene.emit('ar-camera-ready');
+                                console.log('手動觸發ar-camera-ready事件');
+                            }
+                        }
+                    }
+                }
+            }, 2000);
+        });
     </script>
     <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
     <script>
@@ -352,26 +300,22 @@
             margin: 0;
             font-family: Arial, sans-serif;
             overflow: hidden;
-            background-color: transparent !important;
         }
         
         .container {
             display: flex;
             flex-direction: column;
             height: 100vh;
-            background-color: transparent !important;
         }
         
         .ar-section {
             height: 100vh;
             position: relative;
-            background-color: transparent;
         }
         
         .ar-scene {
             width: 100%;
             height: 100%;
-            background-color: transparent !important;
         }
         
         .controls {
@@ -450,19 +394,6 @@
             font-size: 18px;
             background-color: #2196F3;
         }
-        
-        /* 確保a-scene透明背景 */
-        a-scene {
-            background-color: transparent !important;
-            background: transparent !important;
-            z-index: 1;
-        }
-        
-        /* 確保相機視圖正確顯示 */
-        .a-canvas {
-            background-color: transparent !important;
-            z-index: 1 !important;
-        }
     </style>
 </head>
 <body>
@@ -480,11 +411,10 @@
             <a-scene 
                 class="ar-scene"
                 embedded
-                arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; sourceWidth: 1280; sourceHeight: 960; displayWidth: window.innerWidth; displayHeight: window.innerHeight;"
-                renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true; colorManagement: true; physicallyCorrectLights: true;"
+                arjs="sourceType: webcam; debugUIEnabled: false;"
+                renderer="antialias: true; alpha: true;"
                 vr-mode-ui="enabled: false"
                 gesture-detector
-                loading-screen="dotsColor: white; backgroundColor: transparent"
                 device-orientation-permission-ui="enabled: false"
             >
                 <a-assets>
@@ -534,6 +464,41 @@
                     console.error('AR模型預載入失敗:', error);
                 });
                 
+            // 授予權限按鈕點擊處理
+            const grantButton = document.getElementById('grant-permission');
+            
+            grantButton.addEventListener('click', function() {
+                // 請求相機權限
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(stream) {
+                            console.log('相機權限已授予');
+                            // 釋放相機資源，讓AR.js可以使用
+                            stream.getTracks().forEach(track => track.stop());
+                            // 隱藏覆蓋層
+                            const overlay = document.getElementById('permission-overlay');
+                            overlay.style.display = 'none';
+                            // 顯示AR場景
+                            const arScene = document.querySelector('a-scene');
+                            if (arScene) {
+                                arScene.style.visibility = 'visible';
+                                arScene.style.opacity = '1';
+                                
+                                // 使用新頁面方式載入AR場景
+                                const arUrl = window.location.href.split('?')[0] + '?ar=true';
+                                window.location.href = arUrl;
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('無法獲取相機權限:', error);
+                            alert('無法訪問相機。請確保已授予相機權限，然後重新加載頁面。');
+                        });
+                } else {
+                    console.error('瀏覽器不支持getUserMedia API');
+                    alert('您的瀏覽器不支持訪問相機。請嘗試使用更現代的瀏覽器。');
+                }
+            });
+            
             // 設置重置按鈕功能
             document.getElementById('reset-view').addEventListener('click', function() {
                 console.log('重置模型位置和大小');
@@ -788,12 +753,6 @@
                 }
             });
         }
-
-        // 確保頁面加載時設置透明背景
-        document.addEventListener('DOMContentLoaded', function() {
-            // 設置背景透明
-            document.body.style.backgroundColor = 'transparent';
-        });
 
         // 監聽自定義的相機權限授予事件
         document.addEventListener('camera-permission-granted', function() {
