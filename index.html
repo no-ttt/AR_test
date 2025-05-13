@@ -524,10 +524,10 @@
             <a-scene 
                 class="ar-scene"
                 embedded
-                arjs="sourceType: webcam; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960; canvasWidth: window.innerWidth; canvasHeight: window.innerHeight;"
-                renderer="antialias: true; alpha: true;"
-                vr-mode-ui="enabled: false"
+                arjs="trackingMethod: best; sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960;"
+                renderer="logarithmicDepthBuffer: true; alpha: true;"
                 gesture-detector
+                vr-mode-ui="enabled: false"
                 device-orientation-permission-ui="enabled: false"
             >
                 <a-assets>
@@ -538,12 +538,13 @@
                     <a-entity
                     id="duck"
                     position="0 0 -2"
-                    scale="0.3 0.3 0.3"
                     rotation="90 0 0"
+                    scale="0.3 0.3 0.3"
+                    visible="true"
+                    shadow="cast: true; receive: true"
                     gltf-model="#duck-model"
                     class="clickable"
-                    gesture-handler="minScale: 0.1; maxScale: 1.0;"
-                    visible="true"
+                    gesture-handler="minScale: 0.1; maxScale: 1; sensitivityX: 2; sensitivityY: 2"
                     ></a-entity>
                 
                 <!-- 備用：使用盒子模型，如果鴨子模型加載失敗可以顯示 -->
@@ -581,96 +582,27 @@
                     console.error('AR模型預載入失敗:', error);
                 });
                 
-            // 授予權限按鈕點擊處理
-            const grantButton = document.getElementById('grant-permission');
-            
-            grantButton.addEventListener('click', function() {
-                console.log('授予權限按鈕被點擊');
-                
-                // 檢測是否為移動設備
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                console.log('是否為移動設備:', isMobile);
-                
-                // 請求相機權限
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    navigator.mediaDevices.getUserMedia({ video: true })
-                        .then(function(stream) {
-                            console.log('相機權限已授予');
-                            // 釋放相機資源，讓AR.js可以使用
-                            stream.getTracks().forEach(track => track.stop());
-                            // 隱藏覆蓋層
-                            const overlay = document.getElementById('permission-overlay');
-                            overlay.style.display = 'none';
-                            
-                            // 對於移動設備，直接顯示AR場景，不重新載入頁面
-                            if (isMobile) {
-                                console.log('移動設備：直接顯示AR場景');
-                                const arScene = document.querySelector('a-scene');
-                                if (arScene) {
-                                    // 顯示AR場景
-                                    arScene.style.visibility = 'visible';
-                                    arScene.style.opacity = '1';
-                                    
-                                    // 設置本地存儲標記，表示已授予權限
-                                    localStorage.setItem('cameraPermissionGranted', 'true');
-                                    
-                                    // 手動觸發AR場景初始化
-                                    setTimeout(function() {
-                                        if (typeof arScene.emit === 'function') {
-                                            arScene.emit('loaded');
-                                            console.log('手動觸發場景loaded事件');
-                                            
-                                            // 確保AR.js系統初始化
-                                            if (arScene.systems && arScene.systems.arjs) {
-                                                const arSystem = arScene.systems.arjs;
-                                                if (typeof arSystem.restart === 'function') {
-                                                    arSystem.restart();
-                                                    console.log('重新啟動AR.js系統');
-                                                }
-                                            }
-                                        }
-                                        
-                                        // 確保鴨子模型可見
-                                        const duckEntity = document.getElementById('duck');
-                                        if (duckEntity) {
-                                            duckEntity.setAttribute('visible', 'true');
-                                            duckEntity.object3D.visible = true;
-                                            console.log('確保鴨子模型可見');
-                                        }
-                                        
-                                        // 調用統一的鴨子顯示函數
-                                        ensureDuckVisible();
-                                    }, 1000);
-                                }
-                            } else {
-                                // 對於桌面設備，重新載入頁面
-                                console.log('桌面設備：重新載入頁面');
-                                // 顯示AR場景
-                                const arScene = document.querySelector('a-scene');
-                                if (arScene) {
-                                    // 顯示AR場景
-                                    arScene.style.visibility = 'visible';
-                                    arScene.style.opacity = '1';
-                                    
-                                    // 設置本地存儲標記，表示已授予權限
-                                    localStorage.setItem('cameraPermissionGranted', 'true');
-                                    
-                                    // 重新載入頁面以啟動AR場景
-                                    console.log('重新載入頁面以啟動AR場景');
-                                    setTimeout(() => {
-                                        window.location.reload();
-                                    }, 500);
-                                }
-                            }
-                        })
-                        .catch(function(error) {
-                            console.error('無法獲取相機權限:', error);
-                            alert('無法訪問相機。請確保已授予相機權限，然後重新加載頁面。');
-                        });
-                } else {
+            // 處理權限按鈕的點擊事件
+            document.getElementById('grant-permission').addEventListener('click', function() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     console.error('瀏覽器不支持getUserMedia API');
-                    alert('您的瀏覽器不支持訪問相機。請嘗試使用更現代的瀏覽器。');
+                    alert('您的瀏覽器不支持相機訪問');
+                    return;
                 }
+                
+                navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    console.log('相機權限授予成功');
+                    // 停止流，因為我們只需要權限，不需要流本身
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    // 使用新的初始化函數，確保AR場景正確設置
+                    hideOverlayAndInitAR();
+                })
+                .catch(function(error) {
+                    console.error('相機權限授予失敗:', error);
+                    alert('無法訪問相機，請確保您已授予相機權限');
+                });
             });
             
             // 重置權限按鈕點擊處理
@@ -798,24 +730,160 @@
                     }
                     
                     this.internalState = {
-                        previousState: null
+                        previousState: null,
+                        mouseDown: false,
+                        mouseButtons: { left: false, right: false, middle: false }, // 追蹤哪個按鈕被按下
+                        mouseClickPosition: { x: 0, y: 0 } // 滑鼠點擊位置
                     };
                     
                     this.emitGestureEvent = this.emitGestureEvent.bind(this);
+                    this.handleMouseDown = this.handleMouseDown.bind(this);
+                    this.handleMouseMove = this.handleMouseMove.bind(this);
+                    this.handleMouseUp = this.handleMouseUp.bind(this);
+                    this.handleMouseWheel = this.handleMouseWheel.bind(this);
                     
-                    this.targetElement.addEventListener('touchstart', this.emitGestureEvent, { passive: false });
-                    this.targetElement.addEventListener('touchend', this.emitGestureEvent, { passive: false });
-                    this.targetElement.addEventListener('touchmove', this.emitGestureEvent, { passive: false });
+                    // 觸摸事件監聽
+                    this.targetElement.addEventListener('touchstart', this.emitGestureEvent);
+                    this.targetElement.addEventListener('touchend', this.emitGestureEvent);
+                    this.targetElement.addEventListener('touchmove', this.emitGestureEvent);
+                    
+                    // 滑鼠事件監聽
+                    this.targetElement.addEventListener('mousedown', this.handleMouseDown);
+                    this.targetElement.addEventListener('mousemove', this.handleMouseMove);
+                    this.targetElement.addEventListener('mouseup', this.handleMouseUp);
+                    this.targetElement.addEventListener('wheel', this.handleMouseWheel);
                 },
-                
+                remove: function() {
+                    // 移除觸摸事件監聽
+                    this.targetElement.removeEventListener('touchstart', this.emitGestureEvent);
+                    this.targetElement.removeEventListener('touchend', this.emitGestureEvent);
+                    this.targetElement.removeEventListener('touchmove', this.emitGestureEvent);
+                    
+                    // 移除滑鼠事件監聽
+                    this.targetElement.removeEventListener('mousedown', this.handleMouseDown);
+                    this.targetElement.removeEventListener('mousemove', this.handleMouseMove);
+                    this.targetElement.removeEventListener('mouseup', this.handleMouseUp);
+                    this.targetElement.removeEventListener('wheel', this.handleMouseWheel);
+                },
+                // 處理滑鼠按下事件
+                handleMouseDown: function(event) {
+                    this.internalState.mouseDown = true;
+                    
+                    // 記錄按下的按鈕
+                    switch (event.button) {
+                        case 0: this.internalState.mouseButtons.left = true; break;
+                        case 1: this.internalState.mouseButtons.middle = true; break;
+                        case 2: this.internalState.mouseButtons.right = true; break;
+                    }
+                    
+                    // 記錄滑鼠位置
+                    this.internalState.mouseClickPosition = {
+                        x: event.clientX / window.innerWidth,
+                        y: event.clientY / window.innerHeight
+                    };
+                    
+                    // 創建相應的事件
+                    const mouseState = {
+                        touchCount: 1, // 模擬單指觸摸
+                        position: {
+                            x: event.clientX / window.innerWidth,
+                            y: event.clientY / window.innerHeight
+                        },
+                        startPosition: {
+                            x: event.clientX / window.innerWidth,
+                            y: event.clientY / window.innerHeight
+                        },
+                        startTime: performance.now()
+                    };
+                    
+                    this.internalState.previousState = mouseState;
+                    
+                    // 模擬手指開始事件
+                    this.el.emit('onefingerstart', mouseState);
+                },
+                // 處理滑鼠移動事件
+                handleMouseMove: function(event) {
+                    if (!this.internalState.mouseDown) return;
+                    
+                    const currentPosition = {
+                        x: event.clientX / window.innerWidth,
+                        y: event.clientY / window.innerHeight
+                    };
+                    
+                    // 獲取前一個狀態
+                    const previousState = this.internalState.previousState;
+                    if (!previousState) return;
+                    
+                    // 創建事件詳情
+                    const eventDetail = {
+                        positionChange: {
+                            x: currentPosition.x - previousState.position.x,
+                            y: currentPosition.y - previousState.position.y
+                        },
+                        position: currentPosition,
+                        movementDirection: this.getMovementDirection(previousState.position, currentPosition)
+                    };
+                    
+                    // 更新前一個狀態
+                    this.internalState.previousState.position = currentPosition;
+                    
+                    // 發出相應事件
+                    if (this.internalState.mouseButtons.left) {
+                        this.el.emit('onefingermove', eventDetail); // 左鍵 -> 旋轉
+                    }
+                },
+                // 處理滑鼠放開事件
+                handleMouseUp: function(event) {
+                    // 重置滑鼠狀態
+                    switch (event.button) {
+                        case 0: this.internalState.mouseButtons.left = false; break;
+                        case 1: this.internalState.mouseButtons.middle = false; break;
+                        case 2: this.internalState.mouseButtons.right = false; break;
+                    }
+                    
+                    // 檢查是否所有按鈕都被釋放
+                    if (!this.internalState.mouseButtons.left && 
+                        !this.internalState.mouseButtons.middle && 
+                        !this.internalState.mouseButtons.right) {
+                        this.internalState.mouseDown = false;
+                    }
+                    
+                    // 發出相應事件
+                    if (this.internalState.previousState) {
+                        this.el.emit('onefingerend', this.internalState.previousState);
+                        this.internalState.previousState = null;
+                    }
+                },
+                // 處理滑鼠滾輪事件（用於縮放）
+                handleMouseWheel: function(event) {
+                    event.preventDefault();
+                    
+                    // 創建模擬的雙指手勢狀態
+                    const twoFingerState = {
+                        touchCount: 2,
+                        position: {
+                            x: event.clientX / window.innerWidth,
+                            y: event.clientY / window.innerHeight
+                        },
+                        spread: 20, // 基準展開值
+                        startSpread: 20,
+                        startTime: performance.now(),
+                        spreadChange: event.deltaY > 0 ? -5 : 5 // 根據滾輪方向決定縮放方向
+                    };
+                    
+                    // 發送雙指移動事件以觸發縮放
+                    this.el.emit('twofingermove', twoFingerState);
+                },
+                // 處理觸摸事件
                 emitGestureEvent: function(event) {
+                    // 防止滾動等默認行為
                     event.preventDefault();
                     
                     const currentState = this.getTouchState(event);
                     const previousState = this.internalState.previousState;
                     
                     const gestureContinues = previousState && currentState && 
-                        currentState.touchCount == previousState.touchCount;
+                        currentState.touchCount === previousState.touchCount;
                     
                     const gestureEnded = previousState && !gestureContinues;
                     const gestureStarted = currentState && !gestureContinues;
@@ -846,24 +914,30 @@
                         
                         if (currentState.spread) {
                             eventDetail.spreadChange = currentState.spread - previousState.spread;
-                            console.log("Spread change:", eventDetail.spreadChange);
                         }
                         
-                        // 更新狀態
-                        Object.assign(previousState, currentState);
+                        // 在手指移動事件中加入方向判斷
+                        if (currentState.touchCount === 1) {
+                            const movementDirection = this.getMovementDirection(
+                                previousState.position, 
+                                currentState.position
+                            );
+                            eventDetail.movementDirection = movementDirection;
+                        }
                         
-                        // 觸發移動事件
+                        Object.assign(eventDetail, currentState);
+                        
                         const eventName = this.getEventPrefix(currentState.touchCount) + 'fingermove';
                         this.el.emit(eventName, eventDetail);
+                        this.internalState.previousState = currentState;
                     }
                 },
-                
                 getTouchState: function(event) {
                     if (event.touches.length === 0) {
                         return null;
                     }
                     
-                    // 計算中心點
+                    // 實施平均觸摸點
                     const touchList = [];
                     for (let i = 0; i < event.touches.length; i++) {
                         touchList.push(event.touches[i]);
@@ -873,25 +947,62 @@
                         touchCount: touchList.length
                     };
                     
-                    // 計算中心點
-                    const centerPointX = touchList.reduce((sum, touch) => sum + touch.clientX, 0) / touchList.length;
-                    const centerPointY = touchList.reduce((sum, touch) => sum + touch.clientY, 0) / touchList.length;
+                    // 計算觸摸點的平均位置
+                    const centerPositionRawX = touchList.reduce((sum, touch) => sum + touch.clientX, 0) / touchList.length;
+                    const centerPositionRawY = touchList.reduce((sum, touch) => sum + touch.clientY, 0) / touchList.length;
                     
-                    touchState.position = { x: centerPointX, y: centerPointY };
+                    touchState.positionRaw = { x: centerPositionRawX, y: centerPositionRawY };
                     
-                    // 計算兩指間距離
+                    // 計算歸一化後的位置 (0.0 到 1.0)
+                    touchState.position = { 
+                        x: centerPositionRawX / window.innerWidth,
+                        y: centerPositionRawY / window.innerHeight 
+                    };
+                    
+                    // 計算多個手指時的平均展開距離
                     if (touchList.length >= 2) {
-                        const dx = touchList[1].clientX - touchList[0].clientX;
-                        const dy = touchList[1].clientY - touchList[0].clientY;
-                        touchState.spread = Math.sqrt(dx * dx + dy * dy);
+                        const spread = this.calculateSpread(touchList);
+                        touchState.spread = spread;
                     }
                     
                     return touchState;
                 },
-                
+                calculateSpread: function(touchList) {
+                    let minX = touchList[0].clientX;
+                    let maxX = touchList[0].clientX;
+                    let minY = touchList[0].clientY;
+                    let maxY = touchList[0].clientY;
+                    
+                    // 找出所有觸摸點的邊界框
+                    for (let i = 1; i < touchList.length; i++) {
+                        const touch = touchList[i];
+                        
+                        minX = Math.min(minX, touch.clientX);
+                        maxX = Math.max(maxX, touch.clientX);
+                        minY = Math.min(minY, touch.clientY);
+                        maxY = Math.max(maxY, touch.clientY);
+                    }
+                    
+                    // 使用歐幾里得距離作為展開度量
+                    return Math.sqrt(
+                        Math.pow(maxX - minX, 2) +
+                        Math.pow(maxY - minY, 2)
+                    );
+                },
                 getEventPrefix: function(touchCount) {
                     const numberNames = ['one', 'two', 'three', 'many'];
                     return numberNames[Math.min(touchCount, 4) - 1];
+                },
+                getMovementDirection: function(previousPosition, currentPosition) {
+                    // 判斷手指移動的主要方向
+                    const dx = currentPosition.x - previousPosition.x;
+                    const dy = currentPosition.y - previousPosition.y;
+                    
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        return dx > 0 ? 'right' : 'left';
+                    } else {
+                        return dy > 0 ? 'down' : 'up';
+                    }
                 }
             });
         }
@@ -902,64 +1013,74 @@
             AFRAME.registerComponent('gesture-handler', {
                 schema: {
                     enabled: { default: true },
-                    rotationFactor: { default: 1 },
-                    minScale: { default: 0.05 },
-                    maxScale: { default: 3 }
+                    rotationFactor: { default: 5 },
+                    minScale: { default: 0.1 },
+                    maxScale: { default: 8 },
+                    moveSpeed: { default: 0.01 },
+                    sensitivityX: { default: 1 },
+                    sensitivityY: { default: 1 }
                 },
                 
                 init: function() {
+                    this.handleScale = this.handleScale.bind(this);
+                    this.handleRotation = this.handleRotation.bind(this);
+                    
+                    this.isVisible = false;
                     this.initialScale = this.el.object3D.scale.clone();
                     this.scaleFactor = 1;
                     
-                    // 不再需要檢查標記可見性
-                    this.isMarkerVisible = true;
+                    this.el.sceneEl.addEventListener('onefingermove', this.handleRotation);
+                    this.el.sceneEl.addEventListener('twofingermove', this.handleScale);
                     
-                    this.el.addEventListener('click', this.onClick.bind(this));
-                    
-                    // 用於縮放和旋轉的事件監聽器
-                    this.el.sceneEl.addEventListener('onefingermove', this.handleRotation.bind(this));
-                    this.el.sceneEl.addEventListener('twofingermove', this.handleScale.bind(this));
+                    // 為方便調試添加事件監聽器
+                    this.el.addEventListener('model-loaded', () => {
+                        console.log('模型已加載 - 手勢處理器');
+                        this.isVisible = true;
+                    });
                 },
                 
-                onClick: function(evt) {
-                    console.log("Duck clicked!");
+                remove: function() {
+                    this.el.sceneEl.removeEventListener('onefingermove', this.handleRotation);
+                    this.el.sceneEl.removeEventListener('twofingermove', this.handleScale);
                 },
                 
-                handleRotation: function(evt) {
-                    // 移除標記可見性檢查
-                    
-                    // 計算旋轉量
-                    const rotationSpeed = 0.2;
-                    this.el.object3D.rotation.y += evt.detail.positionChange.x * this.data.rotationFactor * rotationSpeed;
-                    this.el.object3D.rotation.x += evt.detail.positionChange.y * this.data.rotationFactor * rotationSpeed;
-                },
-                
-                handleScale: function(evt) {
-                    // 移除標記可見性檢查
-                    
-                    console.log("Scale event:", evt.detail.spreadChange);
-                    
-                    // 根據手指距離變化計算縮放係數
-                    if (evt.detail.spreadChange > 0) {
-                        // 放大
-                        this.scaleFactor = this.scaleFactor * (1 + evt.detail.spreadChange / 50);
-                    } else {
-                        // 縮小
-                        this.scaleFactor = this.scaleFactor * (1 + evt.detail.spreadChange / 50);
+                handleRotation: function(event) {
+                    console.log('單指移動事件');
+                    if (this.isVisible && this.data.enabled) {
+                        // 根據拖動執行旋轉
+                        this.el.object3D.rotation.y += event.detail.positionChange.x * this.data.rotationFactor * this.data.sensitivityX;
+                        this.el.object3D.rotation.x += event.detail.positionChange.y * this.data.rotationFactor * this.data.sensitivityY;
+                        console.log('旋轉更新為:', this.el.object3D.rotation);
                     }
-                    
-                    // 限制縮放範圍
-                    this.scaleFactor = Math.min(Math.max(this.scaleFactor, this.data.minScale), this.data.maxScale);
-                    
-                    // 應用縮放
-                    this.el.object3D.scale.x = this.scaleFactor * this.initialScale.x;
-                    this.el.object3D.scale.y = this.scaleFactor * this.initialScale.y;
-                    this.el.object3D.scale.z = this.scaleFactor * this.initialScale.z;
-                    
-                    console.log("Current scale:", this.scaleFactor);
+                },
+                
+                handleScale: function(event) {
+                    console.log('雙指縮放事件');
+                    if (this.isVisible && this.data.enabled) {
+                        // 縮放
+                        this.scaleFactor *=  1 + event.detail.spreadChange / event.detail.startSpread;
+                        
+                        // 限制縮放比例在最小和最大值之間
+                        this.scaleFactor = Math.min(Math.max(this.scaleFactor, this.data.minScale), this.data.maxScale);
+                        
+                        // 應用縮放
+                        this.el.object3D.scale.x = this.scaleFactor * this.initialScale.x;
+                        this.el.object3D.scale.y = this.scaleFactor * this.initialScale.y;
+                        this.el.object3D.scale.z = this.scaleFactor * this.initialScale.z;
+                        
+                        console.log('縮放更新為:', this.scaleFactor);
+                    }
                 }
             });
         }
+
+        AFRAME.registerComponent('clickable', {
+            init: function() {
+                this.el.addEventListener('click', function() {
+                    console.log('點擊!');
+                });
+            }
+        });
 
         // 監聽自定義的相機權限授予事件
         document.addEventListener('camera-permission-granted', function() {
@@ -996,6 +1117,18 @@
                 duckEntity.setAttribute('position', '0 0 -2');
                 duckEntity.setAttribute('rotation', '90 0 0');
                 duckEntity.setAttribute('scale', '0.3 0.3 0.3');
+                
+                // 確保手勢處理器存在
+                if (!duckEntity.hasAttribute('gesture-handler')) {
+                    console.log('添加手勢處理器到鴨子模型');
+                    duckEntity.setAttribute('gesture-handler', 'minScale: 0.1; maxScale: 1.0');
+                }
+                
+                // 確保clickable類存在
+                if (!duckEntity.classList.contains('clickable')) {
+                    console.log('添加clickable類到鴨子模型');
+                    duckEntity.classList.add('clickable');
+                }
                 
                 console.log('鴨子模型設置完成');
                 
@@ -1042,6 +1175,22 @@
                     console.log('手動創建備用模型完成');
                 }
             }
+        }
+
+        // 隱藏權限覆蓋層並初始化AR場景
+        function hideOverlayAndInitAR() {
+            // 隱藏權限覆蓋層
+            document.getElementById('permission-overlay').style.display = 'none';
+            
+            // 重新啟動AR.js
+            document.querySelector('a-scene').addEventListener('loaded', function () {
+                console.log('AR場景已加載');
+                // 確保鴨子模型在場景加載後可見
+                setTimeout(ensureDuckVisible, 1000);
+            });
+            
+            // 加載模型
+            preloadModel('/3d/duck.glb');
         }
     </script>
 </body>
