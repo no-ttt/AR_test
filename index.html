@@ -7,6 +7,46 @@
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     
+    <!-- 添加相機權限處理腳本 -->
+    <script>
+        // 在AR.js初始化前處理相機權限
+        window.addEventListener('camera-init', function() {
+            console.log('相機初始化中...');
+        });
+        
+        window.addEventListener('camera-error', function(error) {
+            console.error('相機錯誤:', error);
+            alert('無法訪問相機。請確保已授予相機權限，然後重新加載頁面。');
+        });
+        
+        // 在頁面加載完成後，初始化AR.js
+        document.addEventListener('DOMContentLoaded', function() {
+            // 檢查是否已經授予相機權限
+            navigator.permissions && navigator.permissions.query({name: 'camera'})
+                .then(function(permissionStatus) {
+                    console.log('相機權限狀態:', permissionStatus.state);
+                    
+                    // 如果已經授予權限，隱藏權限按鈕
+                    if (permissionStatus.state === 'granted') {
+                        document.getElementById('camera-permission').style.display = 'none';
+                    }
+                    
+                    // 監聽權限變化
+                    permissionStatus.onchange = function() {
+                        console.log('相機權限變更為:', this.state);
+                        if (this.state === 'granted') {
+                            document.getElementById('camera-permission').style.display = 'none';
+                        } else {
+                            document.getElementById('camera-permission').style.display = 'inline-block';
+                        }
+                    };
+                })
+                .catch(function(error) {
+                    console.log('無法查詢權限狀態:', error);
+                });
+        });
+    </script>
+    
     <!-- 使用單一的THREE導入方式 -->
     <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
     <script>
@@ -143,20 +183,67 @@
             border-radius: 4px;
             z-index: 10;
         }
+        
+        /* 添加覆蓋層樣式 */
+        .permission-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            text-align: center;
+        }
+        
+        .permission-overlay h2 {
+            margin-bottom: 20px;
+        }
+        
+        .permission-overlay p {
+            margin-bottom: 30px;
+            max-width: 80%;
+        }
+        
+        .permission-overlay button {
+            padding: 12px 24px;
+            font-size: 18px;
+            background-color: #2196F3;
+        }
     </style>
 </head>
 <body>
+    <!-- 相機權限覆蓋層 -->
+    <div id="permission-overlay" class="permission-overlay">
+        <h2>AR 小鴨體驗</h2>
+        <p>此體驗需要使用您的相機。請點擊下方按鈕授予相機權限。</p>
+        <button id="grant-permission">授予相機權限</button>
+    </div>
+    
     <div class="container">
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">AR 小鴨體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
+            <a-scene 
+                embedded 
+                arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; autoGrantPermissions: true;" 
+                renderer="logarithmicDepthBuffer: true;" 
+                vr-mode-ui="enabled: false" 
+                gesture-detector
+                loading-screen="dotsColor: white; backgroundColor: black"
+                device-orientation-permission-ui="enabled: false"
+            >
                 <a-assets>
                     <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"></a-asset-item>
                 </a-assets>
                 
                 <!-- 使用a-entity直接在相機前方放置模型，不需要標記 -->
-                <a-entity
+                    <a-entity
                     id="duck"
                     position="0 -0.5 -2"
                     scale="0.3 0.3 0.3"
@@ -164,7 +251,7 @@
                     gltf-model="#duck-model"
                     class="clickable"
                     gesture-handler="minScale: 0.1; maxScale: 1.0;"
-                ></a-entity>
+                    ></a-entity>
                 
                 <a-entity camera look-controls></a-entity>
             </a-scene>
@@ -197,7 +284,65 @@
                 .catch(error => {
                     console.error('AR模型預載入失敗:', error);
                 });
-
+                
+            // 處理覆蓋層和相機權限
+            const overlay = document.getElementById('permission-overlay');
+            const grantButton = document.getElementById('grant-permission');
+            
+            // 檢查是否已經授予相機權限
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({name: 'camera'})
+                    .then(function(permissionStatus) {
+                        console.log('相機權限狀態:', permissionStatus.state);
+                        
+                        // 如果已經授予權限，隱藏覆蓋層
+                        if (permissionStatus.state === 'granted') {
+                            overlay.style.display = 'none';
+                        }
+                        
+                        // 監聽權限變化
+                        permissionStatus.onchange = function() {
+                            console.log('相機權限變更為:', this.state);
+                            if (this.state === 'granted') {
+                                overlay.style.display = 'none';
+                            } else {
+                                overlay.style.display = 'flex';
+                            }
+                        };
+                    })
+                    .catch(function(error) {
+                        console.log('無法查詢權限狀態:', error);
+                    });
+            }
+            
+            // 授予權限按鈕點擊處理
+            grantButton.addEventListener('click', function() {
+                // 請求相機權限
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(stream) {
+                            console.log('相機權限已授予');
+                            // 釋放相機資源，讓AR.js可以使用
+                            stream.getTracks().forEach(track => track.stop());
+                            // 隱藏覆蓋層
+                            overlay.style.display = 'none';
+                            // 重新載入AR場景
+                            const arScene = document.querySelector('a-scene');
+                            if (arScene) {
+                                setTimeout(() => {
+                                    arScene.reload();
+                                }, 500);
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('相機權限被拒絕:', error);
+                            alert('無法獲取相機權限。請在瀏覽器設置中允許相機訪問，然後重新載入頁面。');
+                        });
+                } else {
+                    alert('您的瀏覽器不支持相機訪問。請使用最新版本的Chrome、Firefox或Safari。');
+                }
+            });
+            
             // 設置重置按鈕功能
             document.getElementById('reset-view').addEventListener('click', function() {
                 console.log('重置模型位置和大小');
