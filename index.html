@@ -572,16 +572,67 @@
         window.onload = function() {
             console.log('頁面載入完成');
             
+            // 檢測是否為移動設備
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            console.log('是否為移動設備:', isMobile);
+            
+            // 確保模型資源已預載入
+            console.log('預載入Duck模型資源');
+            const duckModelElem = document.querySelector('#duck-model');
+            if (duckModelElem) {
+                // 確保模型URL設置正確
+                if (duckModelElem.getAttribute('src') !== DUCK_MODEL_URL) {
+                    console.log('更新模型URL:', DUCK_MODEL_URL);
+                    duckModelElem.setAttribute('src', DUCK_MODEL_URL);
+                }
+            }
+            
+            // 移動設備上的模型處理
+            if (isMobile) {
+                console.log('為移動設備調整模型設置');
+                // 確保場景渲染器設置正確
+                const arScene = document.querySelector('a-scene');
+                if (arScene) {
+                    // 確保渲染器設置可透明
+                    const rendererStr = arScene.getAttribute('renderer') || '';
+                    if (!rendererStr.includes('alpha: true')) {
+                        console.log('更新渲染器設置，確保透明度');
+                        arScene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true;');
+                    }
+                    
+                    // 確保使用最佳追蹤方法
+                    const arjsStr = arScene.getAttribute('arjs') || '';
+                    if (!arjsStr.includes('trackingMethod: best')) {
+                        console.log('更新AR.js設置，使用最佳追蹤方法');
+                        arScene.setAttribute('arjs', 'trackingMethod: best; sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960;');
+                    }
+                }
+            }
+            
             // 預載入AR模型以確保後續AR體驗順暢
             fetch(DUCK_MODEL_URL)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.blob();
+                })
                 .then(data => {
-                    console.log('AR模型預載入成功');
+                    console.log('AR模型預載入成功，大小:', Math.round(data.size / 1024) + 'KB');
+                    // 如果已經授權並且是移動設備，立即確保模型可見
+                    if (localStorage.getItem('cameraPermissionGranted') === 'true' && isMobile) {
+                        setTimeout(ensureDuckVisible, 300);
+                        setTimeout(ensureDuckVisible, 1000);
+                    }
                 })
                 .catch(error => {
                     console.error('AR模型預載入失敗:', error);
+                    // 如果是移動設備，立即創建備用模型
+                    if (isMobile) {
+                        setTimeout(showBackupModel, 500);
+                    }
                 });
-                
+            
             // 處理權限按鈕的點擊事件
             document.getElementById('grant-permission').addEventListener('click', function() {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1099,22 +1150,51 @@
             console.log('確保鴨子模型顯示');
             const duckEntity = document.getElementById('duck');
             
+            // 判斷是否為移動設備
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            console.log('是否為移動設備:', isMobile);
+            
             // 檢查主模型是否存在
             if (duckEntity) {
                 console.log('找到鴨子模型，嘗試設置可見性');
+                
                 // 強制設置可見性
                 duckEntity.setAttribute('visible', 'true');
                 
                 // 如果有object3D，直接設置其可見性
                 if (duckEntity.object3D) {
                     duckEntity.object3D.visible = true;
+                    
+                    // 如果是移動設備，需要額外處理
+                    if (isMobile) {
+                        // 確保所有子對象都是可見的
+                        if (duckEntity.object3D.children && duckEntity.object3D.children.length > 0) {
+                            console.log('鴨子模型有子對象，設置所有子對象為可見');
+                            duckEntity.object3D.children.forEach(child => {
+                                child.visible = true;
+                                // 如果子對象還有子對象，也設置為可見
+                                if (child.children && child.children.length > 0) {
+                                    child.children.forEach(grandChild => {
+                                        grandChild.visible = true;
+                                    });
+                                }
+                            });
+                        }
+                    }
+                    
                     console.log('鴨子模型 object3D 設置為可見');
                 } else {
                     console.warn('鴨子模型沒有 object3D');
                 }
                 
                 // 確保位置正確
-                duckEntity.setAttribute('position', '0 0 -2');
+                // 對於移動設備，可能需要不同的位置
+                if (isMobile) {
+                    duckEntity.setAttribute('position', '0 0 -2.5'); // 調整位置，使其在手機上更合適
+                } else {
+                    duckEntity.setAttribute('position', '0 0 -2');
+                }
+                
                 duckEntity.setAttribute('rotation', '90 0 0');
                 duckEntity.setAttribute('scale', '0.3 0.3 0.3');
                 
@@ -1143,8 +1223,25 @@
                     if (!duckEntity.object3D || !duckEntity.object3D.children || duckEntity.object3D.children.length === 0) {
                         console.warn('鴨子模型似乎未正確加載，顯示備用模型');
                         showBackupModel();
+                    } else {
+                        // 再次確認所有可視性設置
+                        duckEntity.object3D.visible = true;
+                        duckEntity.setAttribute('visible', 'true');
+                        
+                        // 手機設備上額外確認
+                        if (isMobile) {
+                            // 強制更新材質和可見性
+                            if (duckEntity.object3D.children) {
+                                duckEntity.object3D.children.forEach(function(child) {
+                                    if (child.material) {
+                                        child.material.needsUpdate = true;
+                                    }
+                                    child.visible = true;
+                                });
+                            }
+                        }
                     }
-                }, 3000);
+                }, 1000);
             } else {
                 console.error('找不到鴨子模型，顯示備用模型');
                 showBackupModel();
@@ -1154,43 +1251,135 @@
         // 顯示備用模型
         function showBackupModel() {
             console.log('顯示備用模型');
-            const backupModel = document.getElementById('backup-model');
-            if (backupModel) {
-                backupModel.setAttribute('visible', 'true');
-                console.log('備用模型設置為可見');
-            } else {
-                console.error('找不到備用模型');
-                
-                // 嘗試手動創建備用模型
+            
+            // 隱藏原始鴨子模型
+            const duckEntity = document.getElementById('duck');
+            if (duckEntity) {
+                duckEntity.setAttribute('visible', 'false');
+                if (duckEntity.object3D) {
+                    duckEntity.object3D.visible = false;
+                }
+            }
+            
+            // 檢查是否為移動設備
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // 找到或創建備用模型
+            let backupModel = document.getElementById('backup-model');
+            
+            if (!backupModel) {
+                console.log('未找到備用模型，創建新的備用模型');
+                // 創建新的備用模型
                 const scene = document.querySelector('a-scene');
                 if (scene) {
-                    console.log('嘗試手動創建備用模型');
-                    const newBox = document.createElement('a-box');
-                    newBox.id = 'backup-model';
-                    newBox.setAttribute('position', '0 0 -2');
-                    newBox.setAttribute('scale', '0.2 0.2 0.2');
-                    newBox.setAttribute('color', 'yellow');
-                    newBox.setAttribute('visible', 'true');
-                    scene.appendChild(newBox);
+                    backupModel = document.createElement('a-box');
+                    backupModel.id = 'backup-model';
+                    backupModel.setAttribute('color', 'yellow');
+                    backupModel.setAttribute('class', 'clickable');
+                    
+                    // 應用手勢處理器
+                    backupModel.setAttribute('gesture-handler', 'minScale: 0.1; maxScale: 1.0;');
+                    
+                    scene.appendChild(backupModel);
                     console.log('手動創建備用模型完成');
                 }
+            }
+            
+            if (backupModel) {
+                // 修改備用模型的位置和大小，適應不同設備
+                if (isMobile) {
+                    backupModel.setAttribute('position', '0 0 -2.5');
+                    backupModel.setAttribute('scale', '0.3 0.3 0.3');
+                } else {
+                    backupModel.setAttribute('position', '0 0 -2');
+                    backupModel.setAttribute('scale', '0.2 0.2 0.2');
+                }
+                
+                // 確保備用模型可見
+                backupModel.setAttribute('visible', 'true');
+                if (backupModel.object3D) {
+                    backupModel.object3D.visible = true;
+                }
+                
+                console.log('備用模型設置為可見');
+                
+                // 添加變色效果以便用戶知道這是備用模型
+                let colorInterval;
+                const colors = ['yellow', 'orange', 'red', 'orange'];
+                let colorIndex = 0;
+                
+                // 清除之前可能存在的顏色變化間隔
+                if (window.backupColorInterval) {
+                    clearInterval(window.backupColorInterval);
+                }
+                
+                // 創建新的顏色變化間隔
+                window.backupColorInterval = setInterval(function() {
+                    backupModel.setAttribute('color', colors[colorIndex]);
+                    colorIndex = (colorIndex + 1) % colors.length;
+                }, 500);
+            } else {
+                console.error('無法創建備用模型');
+                // 嘗試顯示提示訊息
+                alert('無法顯示3D模型，請嘗試重新載入頁面');
             }
         }
 
         // 隱藏權限覆蓋層並初始化AR場景
         function hideOverlayAndInitAR() {
+            console.log('隱藏覆蓋層並初始化AR場景');
+            
             // 隱藏權限覆蓋層
             document.getElementById('permission-overlay').style.display = 'none';
             
-            // 重新啟動AR.js
-            document.querySelector('a-scene').addEventListener('loaded', function () {
-                console.log('AR場景已加載');
-                // 確保鴨子模型在場景加載後可見
-                setTimeout(ensureDuckVisible, 1000);
-            });
+            // 立即設置相機權限已授予標記
+            localStorage.setItem('cameraPermissionGranted', 'true');
             
-            // 加載模型
-            preloadModel('/3d/duck.glb');
+            // 立即讓AR場景可見
+            const arScene = document.querySelector('a-scene');
+            if (arScene) {
+                arScene.style.visibility = 'visible';
+                arScene.style.opacity = '1';
+                
+                // 確保A-Frame場景已初始化
+                if (arScene.hasLoaded) {
+                    console.log('場景已加載，立即確保鴨子可見');
+                    setTimeout(ensureDuckVisible, 100);
+                } else {
+                    console.log('等待場景加載...');
+                    arScene.addEventListener('loaded', function() {
+                        console.log('AR場景加載完成');
+                        // 確保鴨子模型在場景加載後可見
+                        setTimeout(ensureDuckVisible, 100);
+                    });
+                }
+            }
+            
+            // 多次嘗試確保模型可見，對於移動設備尤其重要
+            setTimeout(ensureDuckVisible, 500);
+            setTimeout(ensureDuckVisible, 1000);
+            setTimeout(ensureDuckVisible, 2000);
+            
+            // 預載入模型
+            console.log('預載入duck模型');
+            preloadModel(DUCK_MODEL_URL);
+        }
+
+        // 預載入模型
+        function preloadModel(url) {
+            console.log('預載入模型:', url);
+            
+            fetch(url)
+                .then(response => {
+                    console.log('模型預載入成功');
+                    // 在模型預載入成功後再次確保模型可見
+                    setTimeout(ensureDuckVisible, 100);
+                })
+                .catch(error => {
+                    console.error('模型預載入失敗:', error);
+                    // 如果預載入失敗，嘗試顯示備用模型
+                    showBackupModel();
+                });
         }
     </script>
 </body>
