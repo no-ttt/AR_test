@@ -95,22 +95,66 @@
                 permissionButton.style.fontSize = '16px';
                 
                 permissionButton.addEventListener('click', function() {
+                    // 立即隱藏按鈕避免多次點擊
+                    permissionButton.style.display = 'none';
+                    
+                    // 顯示載入中訊息
+                    const loadingMsg = document.createElement('div');
+                    loadingMsg.innerHTML = '正在處理權限請求...';
+                    loadingMsg.style.position = 'fixed';
+                    loadingMsg.style.top = '50%';
+                    loadingMsg.style.left = '50%';
+                    loadingMsg.style.transform = 'translate(-50%, -50%)';
+                    loadingMsg.style.zIndex = '9999';
+                    loadingMsg.style.padding = '15px';
+                    loadingMsg.style.backgroundColor = 'rgba(0,0,0,0.7)';
+                    loadingMsg.style.color = 'white';
+                    loadingMsg.style.borderRadius = '5px';
+                    loadingMsg.id = 'permission-loading';
+                    document.body.appendChild(loadingMsg);
+                    
                     DeviceMotionEvent.requestPermission()
                         .then(response => {
+                            // 無論結果如何都移除按鈕和載入訊息
+                            if (document.body.contains(permissionButton)) {
+                                document.body.removeChild(permissionButton);
+                            }
+                            const loadingElement = document.getElementById('permission-loading');
+                            if (loadingElement) {
+                                document.body.removeChild(loadingElement);
+                            }
+                            
                             if (response === 'granted') {
                                 console.log('設備動作權限已授予');
-                                document.body.removeChild(permissionButton);
-                                
                                 // 強制刷新頁面以應用權限
-                                location.reload();
+                                window.location.reload();
                             } else {
                                 console.error('設備動作權限被拒絕');
                                 alert('需要動作感測器權限才能使用AR功能');
+                                // 拒絕後重新顯示按鈕
+                                permissionButton.style.display = 'block';
+                                document.body.appendChild(permissionButton);
                             }
                         })
-                        .catch(console.error);
+                        .catch(error => {
+                            console.error('權限請求發生錯誤:', error);
+                            alert('無法請求權限: ' + error.message);
+                            
+                            // 移除載入訊息
+                            const loadingElement = document.getElementById('permission-loading');
+                            if (loadingElement) {
+                                document.body.removeChild(loadingElement);
+                            }
+                            
+                            // 錯誤後重新顯示按鈕
+                            permissionButton.style.display = 'block';
+                            if (!document.body.contains(permissionButton)) {
+                                document.body.appendChild(permissionButton);
+                            }
+                        });
                 });
                 
+                // 確保按鈕添加到頁面
                 document.body.appendChild(permissionButton);
             }
         });
