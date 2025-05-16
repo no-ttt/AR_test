@@ -75,6 +75,45 @@
         } else {
             console.log('THREE is loaded:', THREE.REVISION);
         }
+        
+        // 添加設備動作權限處理代碼
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                // iOS 13+ 設備需要明確請求權限
+                const permissionButton = document.createElement('button');
+                permissionButton.innerHTML = '允許使用動作感測器';
+                permissionButton.style.position = 'fixed';
+                permissionButton.style.top = '50%';
+                permissionButton.style.left = '50%';
+                permissionButton.style.transform = 'translate(-50%, -50%)';
+                permissionButton.style.zIndex = '9999';
+                permissionButton.style.padding = '15px';
+                permissionButton.style.backgroundColor = '#4CAF50';
+                permissionButton.style.color = 'white';
+                permissionButton.style.border = 'none';
+                permissionButton.style.borderRadius = '5px';
+                permissionButton.style.fontSize = '16px';
+                
+                permissionButton.addEventListener('click', function() {
+                    DeviceMotionEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                console.log('設備動作權限已授予');
+                                document.body.removeChild(permissionButton);
+                                
+                                // 強制刷新頁面以應用權限
+                                location.reload();
+                            } else {
+                                console.error('設備動作權限被拒絕');
+                                alert('需要動作感測器權限才能使用AR功能');
+                            }
+                        })
+                        .catch(console.error);
+                });
+                
+                document.body.appendChild(permissionButton);
+            }
+        });
     </script>
     <style>
         body {
@@ -150,7 +189,7 @@
         <!-- AR 部分 -->
         <div class="ar-section">
             <div class="section-title">3D 小鴨體驗</div>
-            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
+            <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;" renderer="logarithmicDepthBuffer: true;" vr-mode-ui="enabled: false" gesture-detector>
                 <a-assets>
                     <a-asset-item id="duck-model" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf"></a-asset-item>
                 </a-assets>
